@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install -r requirements.txt)",
+      "Bash(python scripts/test_scraper.py)",
+      "Bash(python -m pytest tests/test_exchange_rate_scraper.py -v)",
+      "Bash(python scripts/test_exchange_rate_scraper.py)",
+      "Bash(pip install pandas -q)",
+      "Bash(python -c \":*)",
+      "Bash(python scripts/test_kb_exchange_rate_scraper.py)"
+    ]
+  }
+}
