@@ -7,6 +7,7 @@ Ported from the reference kis_auth.py (REST portion only — no WebSocket
 support, no file-based token caching). The access token is cached in
 memory and refreshed automatically when it expires.
 """
+import json
 import logging
 import time
 from collections import namedtuple
@@ -48,8 +49,11 @@ class APIResp:
         return _th(**fld)
 
     def _set_body(self):
-        _tb = namedtuple("body", self._resp.json().keys())
-        return _tb(**self._resp.json())
+        # KIS responses are UTF-8 JSON; requests' encoding auto-detection
+        # can misdetect Korean text and produce mojibake, so decode explicitly.
+        body = json.loads(self._resp.content.decode("utf-8"))
+        _tb = namedtuple("body", body.keys())
+        return _tb(**body)
 
     def getHeader(self):
         return self._header
