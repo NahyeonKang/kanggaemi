@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     KIWOOM_APPKEY: str = ""
     KIWOOM_SECRETKEY: str = ""
 
+    KIS_BASE_URL: str = "https://openapi.koreainvestment.com:9443"
+    KIS_APPKEY: str = ""
+    KIS_SECRETKEY: str = ""
+
     FRED_API_KEY: str = ""
     NEWS_API_KEY: str = ""
 

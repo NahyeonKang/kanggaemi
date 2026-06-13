@@ -8,7 +8,7 @@ from app.scrapers.exchange_rate.kb_exchange_rate_scraper import KBExchangeRateSc
 scraper = KBExchangeRateScraper()
 
 # fetch a specific past date to ensure data exists
-result = scraper.fetch_usdkrw(search_date="20260313")
+result = scraper.fetch_usdkrw(search_date="20260612")
 
 print(f"target_date  : {result.target_date}")
 print(f"fetched_at   : {result.fetched_at}")
