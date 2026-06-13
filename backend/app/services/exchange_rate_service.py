@@ -5,6 +5,7 @@ Business logic for exchange rate data: scraping, persistence, and retrieval.
 """
 
 import logging
+import re
 from datetime import date, datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -20,15 +21,6 @@ logger = logging.getLogger(__name__)
 
 
 class ExchangeRateService:
-    """
-    Orchestrates scraping, persistence, and retrieval of exchange rate quotes.
-
-    Rules for automatic search_date resolution:
-    - If today is not a Korean business day, use the most recent previous business day.
-    - If today is a business day but current time is before 08:30 KST, use the most recent previous business day.
-    - Otherwise, use today.
-    """
-
     def __init__(self) -> None:
         self._scraper = KBExchangeRateScraper()
         self._repo = ExchangeRateRepository()
@@ -41,15 +33,12 @@ class ExchangeRateService:
         search_date: Optional[str] = None,
     ) -> dict:
         """
-        Fetch intraday USD/KRW quotes from KB Bank and persist them.
-
-        Args:
-            db: SQLAlchemy session.
-            search_date: Date string in YYYYMMDD format. If omitted, it is resolved automatically.
-
-        Returns:
-            Dict with source, currency_code, target_date, affected_count, quotes.
+        search_date: YYYYMMDD 또는 YYYY.MM.DD 모두 허용. 생략 시 자동 결정.
         """
+        if search_date is not None:
+            # 스크래퍼가 YYYYMMDD를 요구하므로 해당 포맷으로 정규화
+            search_date = self._normalize_to_yyyymmdd(search_date)
+
         resolved_search_date = search_date or self._resolve_search_date()
         logger.info("Syncing USD/KRW quotes for %s.", resolved_search_date)
 
@@ -85,21 +74,41 @@ class ExchangeRateService:
         target_date: str,
     ) -> list[ExchangeRateQuoteModel]:
         """
-        Return stored quotes for a given currency and date.
-
-        Args:
-            db: SQLAlchemy session.
-            currency_code: e.g. "USD".
-            target_date: YYYY.MM.DD format.
+        target_date: YYYYMMDD 또는 YYYY.MM.DD 모두 허용.
+        DB 조회는 YYYY.MM.DD 포맷 사용.
         """
+        normalized = self._normalize_to_yyyy_mm_dd(target_date)
         return self._repo.get_latest_quotes_by_date(
-            db, currency_code=currency_code, target_date=target_date
+            db, currency_code=currency_code, target_date=normalized
+        )
+
+    # ------------------------------------------------------------------ #
+    # Private helpers                                                      #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _normalize_to_yyyymmdd(raw: str) -> str:
+        """YYYYMMDD 또는 YYYY.MM.DD → YYYYMMDD"""
+        if re.fullmatch(r"\d{8}", raw):
+            return raw
+        if re.fullmatch(r"\d{4}\.\d{2}\.\d{2}", raw):
+            return raw.replace(".", "")
+        raise ValueError(
+            f"target_date must be YYYYMMDD or YYYY.MM.DD, got: {raw!r}"
+        )
+
+    @staticmethod
+    def _normalize_to_yyyy_mm_dd(raw: str) -> str:
+        """YYYYMMDD 또는 YYYY.MM.DD → YYYY.MM.DD"""
+        if re.fullmatch(r"\d{8}", raw):
+            return f"{raw[:4]}.{raw[4:6]}.{raw[6:]}"
+        if re.fullmatch(r"\d{4}\.\d{2}\.\d{2}", raw):
+            return raw
+        raise ValueError(
+            f"target_date must be YYYYMMDD or YYYY.MM.DD, got: {raw!r}"
         )
 
     def _resolve_search_date(self) -> str:
-        """
-        Resolve search_date in YYYYMMDD format using Korean business-day rules.
-        """
         now = datetime.now(self._kst)
         today = now.date()
 
@@ -119,11 +128,8 @@ class ExchangeRateService:
         return candidate
 
     def _is_business_day(self, target_date: date) -> bool:
-        # Saturday=5, Sunday=6
         if target_date.weekday() >= 5:
             return False
-
         if target_date in self._kr_holidays:
             return False
-
         return True
