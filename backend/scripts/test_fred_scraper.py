@@ -3,9 +3,9 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.scrapers.fred.fred_macro_scraper import FredMacroScraper
+from app.scrapers.fred.fred_scraper import FredScraper
 
-scraper = FredMacroScraper()
+scraper = FredScraper()
 
 for series_id in ["DGS10", "DFII10", "NASDAQSOX", "VIXCLS"]:
     result = scraper.fetch_last_1y_series(series_id)

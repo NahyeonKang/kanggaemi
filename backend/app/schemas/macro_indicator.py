@@ -4,7 +4,7 @@ app/schemas/macro_indicator.py
 Pydantic schemas for the macro indicator domain.
 
 Scraper-layer schemas (FredObservation, FredSeriesData) are used internally
-by FredMacroScraper and the service layer.
+by FredScraper (shared with the yield domain) and the service layer.
 
 API-layer schemas (MacroSyncResponse, MacroObservationResponse) are used
 by the FastAPI router.

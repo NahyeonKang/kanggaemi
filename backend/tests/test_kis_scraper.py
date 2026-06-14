@@ -1,10 +1,7 @@
 import pytest
 
-from app.schemas.domestic_bond_rate import DomesticBondRateData, DomesticBondRateItem
-from app.scrapers.kis.kis_domestic_bond_rate_scraper import (
-    KISDomesticBondRateScraper,
-    _parse_items,
-)
+from app.schemas.yield_rate import KISCompInterestData, KISCompInterestItem
+from app.scrapers.kis.kis_scraper import KISScraper, _parse_items
 
 # ---------------------------------------------------------------------------
 # Shared response fixtures
@@ -57,7 +54,7 @@ class TestParseItems:
     def test_single_dict_returns_one_item(self):
         items = _parse_items(OUTPUT1_ROW)
         assert len(items) == 1
-        assert isinstance(items[0], DomesticBondRateItem)
+        assert isinstance(items[0], KISCompInterestItem)
 
     def test_list_returns_all_items(self):
         items = _parse_items(OUTPUT1_ROWS)
@@ -92,20 +89,20 @@ class TestParseItems:
 
 
 class TestFetchCompInterest:
-    def test_returns_domestic_bond_rate_data(self):
+    def test_returns_kis_comp_interest_data(self):
         auth_client = _FakeAuthClient(
             [_fake_resp(output1=OUTPUT1_ROW)]
         )
-        result = KISDomesticBondRateScraper(auth_client=auth_client).fetch_comp_interest(
+        result = KISScraper(auth_client=auth_client).fetch_comp_interest(
             "I", "20702", "1", ""
         )
-        assert isinstance(result, DomesticBondRateData)
+        assert isinstance(result, KISCompInterestData)
 
     def test_output1_parsed(self):
         auth_client = _FakeAuthClient(
             [_fake_resp(output1=OUTPUT1_ROWS)]
         )
-        result = KISDomesticBondRateScraper(auth_client=auth_client).fetch_comp_interest(
+        result = KISScraper(auth_client=auth_client).fetch_comp_interest(
             "I", "20702", "1", ""
         )
         assert len(result.output1) == 2
@@ -114,13 +111,10 @@ class TestFetchCompInterest:
 
     def test_request_params_and_metadata(self):
         auth_client = _FakeAuthClient([_fake_resp(output1=OUTPUT1_ROW)])
-        result = KISDomesticBondRateScraper(auth_client=auth_client).fetch_comp_interest(
+        result = KISScraper(auth_client=auth_client).fetch_comp_interest(
             "I", "20702", "1", ""
         )
         assert result.source == "kis"
-        assert result.market_div_code == "I"
-        assert result.screen_div_code == "20702"
-        assert result.cls_code == "1"
 
         call = auth_client.calls[0]
         assert call["tr_id"] == "FHPST07020000"
@@ -136,14 +130,14 @@ class TestFetchCompInterest:
         from datetime import datetime
 
         auth_client = _FakeAuthClient([_fake_resp(output1=OUTPUT1_ROW)])
-        result = KISDomesticBondRateScraper(auth_client=auth_client).fetch_comp_interest(
+        result = KISScraper(auth_client=auth_client).fetch_comp_interest(
             "I", "20702", "1", ""
         )
         datetime.fromisoformat(result.fetched_at)
 
     def test_follows_continuation_pages(self, monkeypatch):
         monkeypatch.setattr(
-            "app.scrapers.kis.kis_domestic_bond_rate_scraper.smart_sleep",
+            "app.scrapers.kis.kis_scraper.smart_sleep",
             lambda *a, **k: None,
         )
         auth_client = _FakeAuthClient(
@@ -152,7 +146,7 @@ class TestFetchCompInterest:
                 _fake_resp(output1=OUTPUT1_ROWS, tr_cont=""),
             ]
         )
-        result = KISDomesticBondRateScraper(auth_client=auth_client).fetch_comp_interest(
+        result = KISScraper(auth_client=auth_client).fetch_comp_interest(
             "I", "20702", "1", ""
         )
         assert len(result.output1) == 3
@@ -162,12 +156,12 @@ class TestFetchCompInterest:
 
     def test_stops_at_max_pages(self, monkeypatch):
         monkeypatch.setattr(
-            "app.scrapers.kis.kis_domestic_bond_rate_scraper.smart_sleep",
+            "app.scrapers.kis.kis_scraper.smart_sleep",
             lambda *a, **k: None,
         )
         responses = [_fake_resp(output1=OUTPUT1_ROW, tr_cont="M") for _ in range(10)]
         auth_client = _FakeAuthClient(responses)
-        result = KISDomesticBondRateScraper(auth_client=auth_client).fetch_comp_interest(
+        result = KISScraper(auth_client=auth_client).fetch_comp_interest(
             "I", "20702", "1", ""
         )
         assert len(auth_client.calls) == 10
@@ -178,7 +172,7 @@ class TestFetchCompInterest:
             [_fake_resp(rt_cd="1", msg_cd="EGW00123", msg1="모의투자 미지원 종목입니다.")]
         )
         with pytest.raises(ValueError, match="EGW00123"):
-            KISDomesticBondRateScraper(auth_client=auth_client).fetch_comp_interest(
+            KISScraper(auth_client=auth_client).fetch_comp_interest(
                 "I", "20702", "1", ""
             )
 

@@ -1,7 +1,11 @@
 """
-app/scrapers/fred/fred_macro_scraper.py
+app/scrapers/fred/fred_scraper.py
 
-Scraper for FRED (Federal Reserve Economic Data) macro indicator series.
+Generic scraper for the FRED (Federal Reserve Economic Data) API.
+
+Shared by the macro indicator domain (DFII10, NASDAQSOX, VIXCLS) and the
+yield domain (US daily yields: SOFR, DGS2, DGS10, DGS30) via the same
+generic fetch_series(series_id, days).
 """
 from datetime import date, datetime, timedelta
 from typing import Optional
@@ -19,9 +23,9 @@ def _utc_now_iso() -> str:
     return datetime.utcnow().isoformat()
 
 
-class FredMacroScraper:
+class FredScraper:
     """
-    Fetches macro indicator observations from the FRED API.
+    Fetches observation series from the FRED API.
 
     Requires FRED_API_KEY to be set as an environment variable.
     """
@@ -48,7 +52,7 @@ class FredMacroScraper:
         Fetch observations for the past N days from FRED.
 
         Args:
-            series_id: FRED series identifier (e.g. "DGS10", "DFII10").
+            series_id: FRED series identifier (e.g. "DGS10", "DFII10", "SOFR").
             days: number of days of history to fetch.
 
         Returns:

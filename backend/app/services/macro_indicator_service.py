@@ -9,11 +9,13 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from app.models.macro_indicator import MacroIndicatorObservationModel
 from app.repositories.macro_indicator_repository import MacroIndicatorRepository
-from app.scrapers.fred.fred_macro_scraper import FredMacroScraper
+from app.scrapers.fred.fred_scraper import FredScraper
 
 logger = logging.getLogger(__name__)
 
-TARGET_SERIES = ["DGS10", "DFII10", "NASDAQSOX", "VIXCLS"]
+# DGS10 (US 10Y) lives in the yield domain as yield_daily ('US', '10Y').
+# TODO: DFII10 (US 10Y real/TIPS) may move to yield_daily as ('US', '10Y_REAL').
+TARGET_SERIES = ["DFII10", "NASDAQSOX", "VIXCLS"]
 
 _ALLOWED_SERIES = frozenset(TARGET_SERIES)
 _DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -21,7 +23,7 @@ _DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 class MacroIndicatorService:
     def __init__(self) -> None:
-        self._scraper = FredMacroScraper()
+        self._scraper = FredScraper()
         self._repo = MacroIndicatorRepository()
 
     def sync_last_1y_core_market_indicators(self, db: Session) -> dict:
