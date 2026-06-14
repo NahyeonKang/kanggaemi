@@ -48,7 +48,6 @@ class KISDomesticBondRateScraper:
         }
 
         output1: list[DomesticBondRateItem] = []
-        output2: list[DomesticBondRateItem] = []
         tr_cont = ""
 
         for page in range(_MAX_PAGES):
@@ -63,7 +62,6 @@ class KISDomesticBondRateScraper:
 
             body = res.getBody()
             output1.extend(_parse_items(getattr(body, "output1", None)))
-            output2.extend(_parse_items(getattr(body, "output2", None)))
 
             tr_cont = res.getHeader().tr_cont
             if tr_cont not in ("M", "F"):
@@ -80,7 +78,6 @@ class KISDomesticBondRateScraper:
             cls_code=fid_div_cls_code,
             cls_code1=fid_div_cls_code1,
             output1=output1,
-            output2=output2,
             fetched_at=datetime.utcnow().isoformat(),
         )
 
@@ -97,7 +94,6 @@ def _parse_items(raw: object) -> list[DomesticBondRateItem]:
             prdy_vrss_sign=row.get("prdy_vrss_sign"),
             bond_mnrt_prdy_vrss=row.get("bond_mnrt_prdy_vrss"),
             prdy_ctrt=row.get("prdy_ctrt"),
-            bstp_nmix_prdy_ctrt=row.get("bstp_nmix_prdy_ctrt"),
             stck_bsop_date=row.get("stck_bsop_date", ""),
         )
         for row in rows

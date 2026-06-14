@@ -50,7 +50,7 @@ class DomesticBondRateService:
             fid_div_cls_code1,
         )
 
-        records = [self._to_record(data, item) for item in (data.output1 + data.output2)]
+        records = [self._to_record(data, item) for item in data.output1]
         affected = self._repo.upsert_rates(db, records)
 
         return {

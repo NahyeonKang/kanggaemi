@@ -18,12 +18,7 @@ result = scraper.fetch_comp_interest(
 print(f"source       : {result.source}")
 print(f"fetched_at   : {result.fetched_at}")
 print(f"output1      : {len(result.output1)} entries")
-print(f"output2      : {len(result.output2)} entries")
 
 print("\n--- output1 (first 5) ---")
 for item in result.output1:
-    print(f"  [{item.stck_bsop_date}] {item.hts_kor_isnm:<20}  rate={item.bond_mnrt_prpr}")
-
-print("\n--- output2 (first 5) ---")
-for item in result.output2:
     print(f"  [{item.stck_bsop_date}] {item.hts_kor_isnm:<20}  rate={item.bond_mnrt_prpr}")

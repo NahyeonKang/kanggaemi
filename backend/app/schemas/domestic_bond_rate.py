@@ -21,15 +21,14 @@ from pydantic import BaseModel, Field
 
 
 class DomesticBondRateItem(BaseModel):
-    """Single bond rate row from KIS comp-interest output1/output2."""
+    """Single bond rate row from KIS comp-interest output1."""
 
     bcdt_code: str                              # 자료코드
     hts_kor_isnm: str                           # HTS한글종목명
     bond_mnrt_prpr: str                         # 채권금리현재가
     prdy_vrss_sign: Optional[str] = None        # 전일대비부호
     bond_mnrt_prdy_vrss: Optional[str] = None   # 채권금리전일대비
-    prdy_ctrt: Optional[str] = None             # 전일대비율 (output1)
-    bstp_nmix_prdy_ctrt: Optional[str] = None   # 업종지수전일대비율 (output2)
+    prdy_ctrt: Optional[str] = None             # 전일대비율
     stck_bsop_date: str                         # 주식영업일자 (YYYYMMDD)
 
 
@@ -42,7 +41,6 @@ class DomesticBondRateData(BaseModel):
     cls_code: str
     cls_code1: str = ""
     output1: list[DomesticBondRateItem] = Field(default_factory=list)
-    output2: list[DomesticBondRateItem] = Field(default_factory=list)
     fetched_at: str
 
 
