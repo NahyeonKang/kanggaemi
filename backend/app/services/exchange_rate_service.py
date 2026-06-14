@@ -3,7 +3,6 @@ app/services/exchange_rate_service.py
 
 Business logic for exchange rate data: scraping, persistence, and retrieval.
 """
-
 import logging
 import re
 from datetime import date, datetime, timedelta
@@ -13,7 +12,10 @@ from zoneinfo import ZoneInfo
 import holidays
 from sqlalchemy.orm import Session
 
-from app.models.exchange_rate import ExchangeRateQuoteModel
+from app.models.exchange_rate import (
+    ExchangeRateSummaryModel,
+    ExchangeRateDailyModel,
+)
 from app.repositories.exchange_rate_repository import ExchangeRateRepository
 from app.scrapers.exchange_rate.kb_exchange_rate_scraper import KBExchangeRateScraper
 
@@ -27,98 +29,117 @@ class ExchangeRateService:
         self._kst = ZoneInfo("Asia/Seoul")
         self._kr_holidays = holidays.KR()
 
-    def sync_usdkrw_quotes(
-        self,
-        db: Session,
-        search_date: Optional[str] = None,
+    # ── 장중 요약 ────────────────────────────────────────────
+    def sync_usdkrw_summary(
+        self, db: Session, search_date: Optional[str] = None
     ) -> dict:
-        """
-        search_date: YYYYMMDD 또는 YYYY.MM.DD 모두 허용. 생략 시 자동 결정.
-        """
+        """search_date: YYYYMMDD 또는 YYYY.MM.DD. 생략 시 자동 결정."""
         if search_date is not None:
-            # 스크래퍼가 YYYYMMDD를 요구하므로 해당 포맷으로 정규화
             search_date = self._normalize_to_yyyymmdd(search_date)
 
-        resolved_search_date = search_date or self._resolve_search_date()
-        logger.info("Syncing USD/KRW quotes for %s.", resolved_search_date)
+        resolved = search_date or self._resolve_search_date()
+        logger.info("Syncing USD/KRW summary for %s.", resolved)
 
-        kb_data = self._scraper.fetch_usdkrw(search_date=resolved_search_date)
-        affected = self._repo.upsert_quotes(db, kb_data)
-
-        currency_code = kb_data.currency.split("/")[0]
-        fetched_at = kb_data.fetched_at or ""
+        data = self._scraper.fetch_usdkrw_summary(search_date=resolved)
+        affected = self._repo.upsert_summary(db, data)
+        currency_code = data.currency.split("/")[0]
 
         return {
-            "source": kb_data.source,
+            "source": data.source,
             "currency_code": currency_code,
-            "target_date": kb_data.target_date,
+            "target_date": data.target_date,
             "affected_count": affected,
-            "resolved_search_date": resolved_search_date,
-            "quotes": [
-                {
-                    "source": kb_data.source,
-                    "currency_code": currency_code,
-                    "target_date": kb_data.target_date or "",
-                    "quote_time": q.quote_time,
-                    "base_rate": q.base_rate,
-                    "fetched_at": fetched_at,
-                }
-                for q in kb_data.quotes
-            ],
+            "summary": {
+                "source": data.source,
+                "currency_code": currency_code,
+                "target_date": data.target_date,
+                "first_rate": data.first_rate,
+                "last_rate": data.last_rate,
+                "daily_low": data.daily_low,
+                "daily_high": data.daily_high,
+                "daily_avg": data.daily_avg,
+                "fetched_at": data.fetched_at,
+            },
         }
 
-    def get_quotes(
-        self,
-        db: Session,
-        currency_code: str,
-        target_date: str,
-    ) -> list[ExchangeRateQuoteModel]:
-        """
-        target_date: YYYYMMDD 또는 YYYY.MM.DD 모두 허용.
-        DB 조회는 YYYY.MM.DD 포맷 사용.
-        """
+    def get_summary(
+        self, db: Session, currency_code: str, target_date: str
+    ) -> Optional[ExchangeRateSummaryModel]:
         normalized = self._normalize_to_yyyy_mm_dd(target_date)
-        return self._repo.get_latest_quotes_by_date(
+        return self._repo.get_summary_by_date(
             db, currency_code=currency_code, target_date=normalized
         )
 
-    # ------------------------------------------------------------------ #
-    # Private helpers                                                      #
-    # ------------------------------------------------------------------ #
+    # ── 일별 종가 ────────────────────────────────────────────
+    def sync_usdkrw_daily(
+        self, db: Session, start_date: str, end_date: Optional[str] = None
+    ) -> dict:
+        """start_date / end_date: YYYYMMDD 또는 YYYY.MM.DD."""
+        start = self._normalize_to_yyyymmdd(start_date)
+        end = self._normalize_to_yyyymmdd(end_date) if end_date else None
+        logger.info("Syncing USD/KRW daily series for %s ~ %s.", start, end or "today")
 
+        data = self._scraper.fetch_usdkrw_range(start_date=start, end_date=end)
+        affected = self._repo.upsert_daily_quotes(db, data)
+        currency_code = data.currency.split("/")[0]
+
+        return {
+            "source": data.source,
+            "currency_code": currency_code,
+            "start_date": data.start_date,
+            "end_date": data.end_date,
+            "affected_count": affected,
+            "quotes": [
+                {
+                    "source": data.source,
+                    "currency_code": currency_code,
+                    "quote_date": q.quote_date,
+                    "base_rate": q.base_rate,
+                    "fetched_at": data.fetched_at,
+                }
+                for q in data.quotes
+            ],
+        }
+
+    def get_daily(
+        self,
+        db: Session,
+        currency_code: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[ExchangeRateDailyModel]:
+        start = self._normalize_to_yyyy_mm_dd(start_date)
+        end = self._normalize_to_yyyy_mm_dd(end_date)
+        return self._repo.get_daily_quotes(
+            db, currency_code=currency_code, start_date=start, end_date=end
+        )
+
+    # ── Private helpers ──────────────────────────────────────
     @staticmethod
     def _normalize_to_yyyymmdd(raw: str) -> str:
-        """YYYYMMDD 또는 YYYY.MM.DD → YYYYMMDD"""
         if re.fullmatch(r"\d{8}", raw):
             return raw
         if re.fullmatch(r"\d{4}\.\d{2}\.\d{2}", raw):
             return raw.replace(".", "")
-        raise ValueError(
-            f"target_date must be YYYYMMDD or YYYY.MM.DD, got: {raw!r}"
-        )
+        raise ValueError(f"date must be YYYYMMDD or YYYY.MM.DD, got: {raw!r}")
 
     @staticmethod
     def _normalize_to_yyyy_mm_dd(raw: str) -> str:
-        """YYYYMMDD 또는 YYYY.MM.DD → YYYY.MM.DD"""
         if re.fullmatch(r"\d{8}", raw):
             return f"{raw[:4]}.{raw[4:6]}.{raw[6:]}"
         if re.fullmatch(r"\d{4}\.\d{2}\.\d{2}", raw):
             return raw
-        raise ValueError(
-            f"target_date must be YYYYMMDD or YYYY.MM.DD, got: {raw!r}"
-        )
+        raise ValueError(f"date must be YYYYMMDD or YYYY.MM.DD, got: {raw!r}")
 
     def _resolve_search_date(self) -> str:
         now = datetime.now(self._kst)
         today = now.date()
-
         if not self._is_business_day(today):
             target = self._get_previous_business_day(today)
         elif (now.hour, now.minute) < (8, 30):
             target = self._get_previous_business_day(today)
         else:
             target = today
-
         return target.strftime("%Y%m%d")
 
     def _get_previous_business_day(self, current_date: date) -> date:

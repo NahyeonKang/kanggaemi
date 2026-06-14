@@ -3,22 +3,23 @@ app/scrapers/exchange_rate/kb_exchange_rate_scraper.py
 
 KB Bank HTML-based USD/KRW exchange rate scraper.
 
-POSTs to the KB Bank quics component endpoint and parses intraday
-quote data from the returned HTML fragment.
-
-Response structure:
-  #targetTable — parent container; contains the detail table
-  Detail table  — rows with 등록시간 and 매매 기준율 columns
+Two query modes against the KB quics component endpoint:
+  - 조회기준=1 (intraday): parse summary tables (#summary1, #summary3)
+  - 조회기준=2 (range):    parse daily base-rate rows (등록일 / 매매 기준율)
 """
 import logging
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Optional
 
 import requests
 from bs4 import BeautifulSoup
 
-from app.schemas.exchange_rate import IntradayQuote, KBUsdKrwExchangeRate
+from app.schemas.exchange_rate import (
+    KBUsdKrwIntradaySummary,
+    DailyQuote,
+    KBUsdKrwDailySeries,
+)
 from app.scrapers.exchange_rate.base import BaseExchangeRateScraper
 
 logger = logging.getLogger(__name__)
@@ -44,20 +45,17 @@ _HEADERS = {
 
 class KBExchangeRateScraper(BaseExchangeRateScraper):
     """
-    Scrapes intraday USD/KRW quotes from KB Bank by POSTing to the
-    quics component endpoint.
+    Scrapes USD/KRW data from KB Bank.
 
     Usage::
 
         scraper = KBExchangeRateScraper()
 
-        # fetch today's data
-        result = scraper.fetch_usdkrw()
+        # intraday summary for a date
+        summary = scraper.fetch_usdkrw_summary(search_date="20260612")
 
-        # fetch data for a specific date
-        result = scraper.fetch_usdkrw(search_date="20260305")
-
-        print(result.target_date, len(result.quotes))
+        # daily base-rate series over a range
+        series = scraper.fetch_usdkrw_range("20250614", "20260614")
     """
 
     def __init__(self, timeout: int = _TIMEOUT) -> None:
@@ -66,32 +64,68 @@ class KBExchangeRateScraper(BaseExchangeRateScraper):
         self._timeout = timeout
 
     # ------------------------------------------------------------------
-    # Public interface
+    # Public — intraday summary (조회기준=1)
     # ------------------------------------------------------------------
 
-    def fetch_usdkrw(self, search_date: Optional[str] = None) -> KBUsdKrwExchangeRate:
+    def fetch_usdkrw_summary(
+        self, search_date: Optional[str] = None
+    ) -> KBUsdKrwIntradaySummary:
         """
-        Fetch intraday USD/KRW quotes for the given date.
+        Fetch the intraday summary (first/last round, daily low/high/avg)
+        for the given date.
 
         Args:
-            search_date: Date string in YYYYMMDD format.
-                         Defaults to today if not provided.
+            search_date: YYYYMMDD. Defaults to today.
 
         Raises:
             requests.HTTPError: Non-2xx response.
-            ValueError:         Response missing expected HTML structure.
+            ValueError:         Response missing expected summary tables.
         """
         if search_date is None:
             search_date = date.today().strftime("%Y%m%d")
 
         html = self._post_query(search_date)
-        target_date = _format_date(search_date)
-        fetched_at = datetime.now().isoformat()
-        quotes = self._parse_quotes(html)
-        logger.info("Extracted %d quotes for %s.", len(quotes), target_date)
-        return KBUsdKrwExchangeRate(
-            target_date=target_date,
-            fetched_at=fetched_at,
+        summary = self._parse_summary(html)
+        logger.info("Extracted intraday summary for %s.", _format_date(search_date))
+        return KBUsdKrwIntradaySummary(
+            target_date=_format_date(search_date),
+            fetched_at=datetime.now().isoformat(),
+            **summary,
+        )
+
+    # ------------------------------------------------------------------
+    # Public — daily range series (조회기준=2)
+    # ------------------------------------------------------------------
+
+    def fetch_usdkrw_range(
+        self,
+        start_date: str,
+        end_date: Optional[str] = None,
+    ) -> KBUsdKrwDailySeries:
+        """
+        Fetch daily USD/KRW base rates over a date range.
+
+        Args:
+            start_date: YYYYMMDD.
+            end_date:   YYYYMMDD. Defaults to today.
+
+        Raises:
+            requests.HTTPError: Non-2xx response.
+            ValueError:         Response missing expected daily table.
+        """
+        if end_date is None:
+            end_date = date.today().strftime("%Y%m%d")
+
+        html = self._post_range_query(start_date, end_date)
+        quotes = self._parse_daily_quotes(html)
+        logger.info(
+            "Extracted %d daily quotes for %s ~ %s.",
+            len(quotes), start_date, end_date,
+        )
+        return KBUsdKrwDailySeries(
+            start_date=_format_date(start_date),
+            end_date=_format_date(end_date),
+            fetched_at=datetime.now().isoformat(),
             quotes=quotes,
         )
 
@@ -100,12 +134,15 @@ class KBExchangeRateScraper(BaseExchangeRateScraper):
     # ------------------------------------------------------------------
 
     def _post_query(self, search_date: str) -> str:
-        logger.info("POSTing KB query for date=%s.", search_date)
-        resp = self._session.post(
-            _QUERY_URL,
-            data=_build_payload(search_date),
-            timeout=self._timeout,
-        )
+        logger.info("POSTing KB intraday query for date=%s.", search_date)
+        return self._post(_build_payload(search_date))
+
+    def _post_range_query(self, start_date: str, end_date: str) -> str:
+        logger.info("POSTing KB range query for %s ~ %s.", start_date, end_date)
+        return self._post(_build_range_payload(start_date, end_date))
+
+    def _post(self, payload: dict) -> str:
+        resp = self._session.post(_QUERY_URL, data=payload, timeout=self._timeout)
         resp.raise_for_status()
         html = resp.text
         if not html or "targetTable" not in html:
@@ -117,33 +154,45 @@ class KBExchangeRateScraper(BaseExchangeRateScraper):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _parse_quotes(html: str) -> list[IntradayQuote]:
-        """
-        Parse intraday quotes from the KB HTML response.
-
-        Raises:
-            ValueError: #targetTable missing or no quote rows found.
-        """
+    def _parse_summary(html: str) -> dict:
+        """Parse #summary1 / #summary3 cells into summary fields by header label."""
         soup = BeautifulSoup(html, "html.parser")
-        detail_table = _find_detail_table(soup)
+        fields = {
+            "first_rate": _summary_cell(soup, "summary1", "최초회차"),
+            "last_rate": _summary_cell(soup, "summary1", "최종회차"),
+            "daily_low": _summary_cell(soup, "summary3", "일최저"),
+            "daily_high": _summary_cell(soup, "summary3", "일최고"),
+            "daily_avg": _summary_cell(soup, "summary3", "일평균"),
+        }
+        parsed = {}
+        for name, raw in fields.items():
+            value = _to_float(raw)
+            if value is None:
+                raise ValueError(f"Failed to parse summary field {name!r}: {raw!r}")
+            parsed[name] = value
+        return parsed
+
+    @staticmethod
+    def _parse_daily_quotes(html: str) -> list[DailyQuote]:
+        """Parse daily rows (등록일 / 매매 기준율) from the range response."""
+        soup = BeautifulSoup(html, "html.parser")
+        detail_table = _find_daily_detail_table(soup)
 
         rows = detail_table.select("tbody tr") or detail_table.select("tr")
-        quotes: list[IntradayQuote] = []
+        quotes: list[DailyQuote] = []
 
         for row in rows:
             cells = row.select("td")
-            if len(cells) < 3:
+            if len(cells) < 2:
                 continue
-            quote_time = cells[1].get_text(" ", strip=True)
-            base_rate = _to_float(cells[2].get_text(" ", strip=True))
-            if not quote_time or base_rate is None:
+            quote_date = cells[0].get_text(" ", strip=True)
+            base_rate = _to_float(cells[1].get_text(" ", strip=True))
+            if not re.match(r"^\d{4}\.\d{2}\.\d{2}$", quote_date) or base_rate is None:
                 continue
-            if not re.match(r"^\d{2}:\d{2}:\d{2}$", quote_time):
-                continue
-            quotes.append(IntradayQuote(quote_time=quote_time, base_rate=base_rate))
+            quotes.append(DailyQuote(quote_date=quote_date, base_rate=base_rate))
 
         if not quotes:
-            raise ValueError("No quote rows parsed from KB response.")
+            raise ValueError("No daily quote rows parsed from KB range response.")
 
         return quotes
 
@@ -155,58 +204,91 @@ class KBExchangeRateScraper(BaseExchangeRateScraper):
 
 def _build_payload(search_date: str) -> dict:
     now = datetime.now()
-    today = now.strftime("%Y%m%d")
-    start_date = (now.date() - timedelta(days=7)).strftime("%Y%m%d")
     return {
-        "btnClick": "",
-        "DocType": "1",
-        "통화코드": "",
-        "조회년월일": "",
-        "SiteName": "",
-        "strFocusBtn": "",
-        "고시회차기준": "1",
-        "고시종류기준": "0",
-        "조회기준": "1",
-        "요청페이지": "1",
-        "selDate1": "",
-        "selDate2": "",
-        "monyCd": "USD",
-        "selDate": search_date,
+        "btnClick": "", "DocType": "1", "통화코드": "", "조회년월일": "",
+        "SiteName": "", "strFocusBtn": "",
+        "고시회차기준": "1", "고시종류기준": "0",
+        "조회기준": "1", "요청페이지": "1",
+        "selDate1": "", "selDate2": "",
+        "monyCd": "USD", "selDate": search_date,
         "고시통화명": "미국 달러",
         "기준일자": now.strftime("%Y.%m.%d"),
         "기준일시": now.strftime("%H:%M:%S"),
-        "SEL_통화구분": "USD",
-        "조회일자구분": "1",
+        "SEL_통화구분": "USD", "조회일자구분": "1",
         "searchDate": search_date,
-        "startDate": start_date,  # 7 days before today
-        "endDate": today,
-        "고시회차선택": "1",
-        "고시종류선택": "0",
+        "startDate": search_date, "endDate": search_date,
+        "고시회차선택": "1", "고시종류선택": "0",
     }
 
 
-def _find_detail_table(soup: BeautifulSoup):
+def _build_range_payload(start_date: str, end_date: str) -> dict:
+    now = datetime.now()
+    return {
+        "btnClick": "", "DocType": "1", "통화코드": "", "조회년월일": "",
+        "SiteName": "", "strFocusBtn": "",
+        "고시회차기준": "1", "고시종류기준": "0",
+        "조회기준": "2", "요청페이지": "1",       # 기간 조회
+        "selDate1": start_date, "selDate2": end_date,
+        "monyCd": "USD", "selDate": end_date,
+        "고시통화명": "미국 달러",
+        "기준일자": now.strftime("%Y.%m.%d"),
+        "기준일시": now.strftime("%H:%M:%S"),
+        "SEL_통화구분": "USD", "조회일자구분": "2",  # 기간 조회
+        "searchDate": end_date,
+        "startDate": start_date, "endDate": end_date,
+        "고시회차선택": "1", "고시종류선택": "0",
+    }
+
+
+def _summary_cell(soup: BeautifulSoup, table_id: str, label: str) -> str:
+    """Return the <td> value under the <th> matching `label` in #table_id."""
+    table = soup.select_one(f"#{table_id}")
+    if not table:
+        raise ValueError(f"Could not find #{table_id} in KB response HTML.")
+
+    headers = [th.get_text(" ", strip=True) for th in table.select("thead th")]
+    try:
+        idx = headers.index(label)
+    except ValueError:
+        raise ValueError(
+            f"Label {label!r} not found in #{table_id} headers: {headers}"
+        )
+
+    row = table.select_one("tbody tr")
+    if not row:
+        raise ValueError(f"#{table_id} has no data row.")
+
+    cells = row.select("td")
+    if idx >= len(cells):
+        raise ValueError(
+            f"#{table_id}: header {label!r} at index {idx} but row has "
+            f"{len(cells)} cells."
+        )
+    return cells[idx].get_text(" ", strip=True)
+
+
+def _find_daily_detail_table(soup: BeautifulSoup):
     target = soup.select_one("#targetTable")
     if not target:
         raise ValueError("Could not find #targetTable in KB response HTML.")
 
-    tables = target.select("table")
-    for table in tables:
+    for table in target.select("table"):
         text = table.get_text(" ", strip=True)
-        if "등록시간" in text and "매매 기준율" in text:
+        if "등록일" in text and "매매 기준율" in text:
             return table
 
+    tables = target.select("table")
     if len(tables) >= 4:
         return tables[3]
 
-    raise ValueError("Could not find intraday detail table inside #targetTable.")
+    raise ValueError("Could not find daily detail table inside #targetTable.")
 
 
-def _format_date(search_date: str) -> str:
+def _format_date(yyyymmdd: str) -> str:
     """Convert 'YYYYMMDD' to 'YYYY.MM.DD'."""
-    if len(search_date) != 8 or not search_date.isdigit():
-        raise ValueError(f"Invalid search_date format: {search_date!r}")
-    return f"{search_date[:4]}.{search_date[4:6]}.{search_date[6:]}"
+    if len(yyyymmdd) != 8 or not yyyymmdd.isdigit():
+        raise ValueError(f"Invalid date format: {yyyymmdd!r}")
+    return f"{yyyymmdd[:4]}.{yyyymmdd[4:6]}.{yyyymmdd[6:]}"
 
 
 def _to_float(value: str) -> Optional[float]:
