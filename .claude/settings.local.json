@@ -7,7 +7,10 @@
       "Bash(python scripts/test_exchange_rate_scraper.py)",
       "Bash(pip install pandas -q)",
       "Bash(python -c \":*)",
-      "Bash(python scripts/test_kb_exchange_rate_scraper.py)"
+      "Bash(python scripts/test_kb_exchange_rate_scraper.py)",
+      "Bash(python -c \"from app.main import app; print\\('OK'\\); print\\([r.path for r in app.routes]\\)\")",
+      "Bash(python -m pytest --collect-only -q)",
+      "Bash(python -m pytest -q)"
     ]
   }
 }

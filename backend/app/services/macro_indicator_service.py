@@ -24,11 +24,11 @@ class MacroIndicatorService:
         self._scraper = FredMacroScraper()
         self._repo = MacroIndicatorRepository()
 
-    def sync_last_1w_core_market_indicators(self, db: Session) -> dict:
+    def sync_last_1y_core_market_indicators(self, db: Session) -> dict:
         results = []
         for series_id in TARGET_SERIES:
-            logger.info("Syncing 1-week FRED series %s.", series_id)
-            data = self._scraper.fetch_last_1w_series(series_id)
+            logger.info("Syncing 1-year FRED series %s.", series_id)
+            data = self._scraper.fetch_last_1y_series(series_id)
             affected = self._repo.upsert_series_data(db, data)
             dates = [obs.observation_date for obs in data.observations]
             start_date: Optional[str] = min(dates) if dates else None

@@ -23,13 +23,13 @@ def get_macro_indicator_service() -> MacroIndicatorService:
 @router.post(
     "/core-market-indicators/sync",
     response_model=MacroSyncResponse,
-    summary="Sync last 1 week of core market indicators from FRED",
+    summary="Sync last 1 year of core market indicators from FRED",
 )
 def sync_core_market_indicators(
     db: Session = Depends(get_db),
     service: MacroIndicatorService = Depends(get_macro_indicator_service),
 ):
-    return service.sync_last_1w_core_market_indicators(db)
+    return service.sync_last_1y_core_market_indicators(db)
 
 
 @router.get(
