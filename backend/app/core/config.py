@@ -19,6 +19,8 @@ class Settings(BaseSettings):
 
     SCRAPER_TIMEOUT_SECONDS: int = 15
 
+    DATABASE_URL: str
+
     KIWOOM_BASE_URL: str = "https://api.kiwoom.com"
     KIWOOM_APPKEY: str = ""
     KIWOOM_SECRETKEY: str = ""

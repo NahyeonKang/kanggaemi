@@ -7,7 +7,7 @@ from app.scrapers.fred.fred_scraper import FredScraper
 
 scraper = FredScraper()
 
-for series_id in ["SOFR", "DGS30", "DFII10", "NASDAQSOX", "VIXCLS"]:
+for series_id in ["DTWEXBGS", "T10YIE"]: # ["SOFR", "DGS30", "DFII10", "NASDAQSOX", "VIXCLS"]:
     result = scraper.fetch_last_1y_series(series_id)
 
     print(f"\n{'=' * 40}")

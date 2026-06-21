@@ -13,9 +13,7 @@ from app.scrapers.fred.fred_scraper import FredScraper
 
 logger = logging.getLogger(__name__)
 
-# DGS10 (US 10Y) lives in the yield domain as yield_daily ('US', '10Y').
-# TODO: DFII10 (US 10Y real/TIPS) may move to yield_daily as ('US', '10Y_REAL').
-TARGET_SERIES = ["DFII10", "NASDAQSOX", "VIXCLS"]
+TARGET_SERIES = ["DTWEXBGS", "T10YIE", "DFII10", "NASDAQSOX", "VIXCLS"]
 
 _ALLOWED_SERIES = frozenset(TARGET_SERIES)
 _DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")

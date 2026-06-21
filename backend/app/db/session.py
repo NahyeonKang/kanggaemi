@@ -14,13 +14,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
 
-_DATABASE_URL: str = getattr(settings, "DATABASE_URL", "sqlite:///./kanggaemi.db")
+_DATABASE_URL: str = settings.DATABASE_URL
 
-engine = create_engine(
-    _DATABASE_URL,
-    # SQLite-specific: allow multi-threaded access (needed for FastAPI)
-    connect_args={"check_same_thread": False} if _DATABASE_URL.startswith("sqlite") else {},
-)
+engine = create_engine(_DATABASE_URL, pool_pre_ping=True)
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
