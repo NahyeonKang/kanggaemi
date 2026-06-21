@@ -4,6 +4,9 @@ app/api/v1/endpoints/exchange_rate.py
 Exchange rate API endpoints.
 Prefix /exchange-rate is added by the main router.
 """
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -20,16 +23,18 @@ from app.services.exchange_rate_service import ExchangeRateService
 
 router = APIRouter()
 
+_KST = ZoneInfo("Asia/Seoul")
+
 
 def get_exchange_rate_service() -> ExchangeRateService:
     return ExchangeRateService()
 
 
-# ── 장중 요약 ────────────────────────────────────────────────
+# ── 장중 스냅샷 ──────────────────────────────────────────────
 @router.post(
     "/usdkrw/summary/sync",
     response_model=ExchangeRateSummarySyncResponse,
-    summary="Sync USD/KRW intraday summary from KB Bank",
+    summary="Sync USD/KRW intraday summary snapshot from KB Bank",
 )
 def sync_usdkrw_summary(
     req: ExchangeRateSummarySyncRequest,
@@ -45,32 +50,60 @@ def sync_usdkrw_summary(
 @router.get(
     "/usdkrw/summary",
     response_model=ExchangeRateSummaryResponse,
-    summary="Get stored USD/KRW intraday summary by date",
+    summary="Get latest stored USD/KRW snapshot for a date",
 )
 def get_usdkrw_summary(
     target_date: str,
+    base_ccy: str = "USD",
+    quote_ccy: str = "KRW",
     db: Session = Depends(get_db),
     service: ExchangeRateService = Depends(get_exchange_rate_service),
 ):
     try:
-        row = service.get_summary(db, currency_code="USD", target_date=target_date)
+        row = service.get_latest_summary(
+            db, target_date=target_date, base_ccy=base_ccy, quote_ccy=quote_ccy
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
     if row is None:
-        raise HTTPException(status_code=404, detail="Summary not found for date.")
+        raise HTTPException(status_code=404, detail="Snapshot not found for date.")
 
-    return ExchangeRateSummaryResponse(
-        source=row.source,
-        currency_code=row.currency_code,
-        target_date=row.target_date,
-        first_rate=row.first_rate,
-        last_rate=row.last_rate,
-        daily_low=row.daily_low,
-        daily_high=row.daily_high,
-        daily_avg=row.daily_avg,
-        fetched_at=row.fetched_at.isoformat(),
-    )
+    return ExchangeRateSummaryResponse.model_validate(row)
+
+
+@router.get(
+    "/usdkrw/summary/asof",
+    response_model=ExchangeRateSummaryResponse,
+    summary="Get point-in-time USD/KRW snapshot as of a given instant",
+)
+def get_usdkrw_summary_asof(
+    target_date: str,
+    as_of: datetime,                       # ISO 8601, 예: 2026-06-19T11:00:00+09:00
+    base_ccy: str = "USD",
+    quote_ccy: str = "KRW",
+    db: Session = Depends(get_db),
+    service: ExchangeRateService = Depends(get_exchange_rate_service),
+):
+    if as_of.tzinfo is None:               # naive 입력은 KST로 간주
+        as_of = as_of.replace(tzinfo=_KST)
+    try:
+        row = service.get_summary_asof(
+            db,
+            target_date=target_date,
+            as_of=as_of,
+            base_ccy=base_ccy,
+            quote_ccy=quote_ccy,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    if row is None:
+        raise HTTPException(
+            status_code=404, detail="No snapshot at or before as_of."
+        )
+
+    return ExchangeRateSummaryResponse.model_validate(row)
 
 
 # ── 일별 종가 ────────────────────────────────────────────────
@@ -100,23 +133,20 @@ def sync_usdkrw_daily(
 def get_usdkrw_daily(
     start_date: str,
     end_date: str,
+    base_ccy: str = "USD",
+    quote_ccy: str = "KRW",
     db: Session = Depends(get_db),
     service: ExchangeRateService = Depends(get_exchange_rate_service),
 ):
     try:
         rows = service.get_daily(
-            db, currency_code="USD", start_date=start_date, end_date=end_date
+            db,
+            start_date=start_date,
+            end_date=end_date,
+            base_ccy=base_ccy,
+            quote_ccy=quote_ccy,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    return [
-        ExchangeRateDailyResponse(
-            source=r.source,
-            currency_code=r.currency_code,
-            quote_date=r.quote_date,
-            base_rate=r.base_rate,
-            fetched_at=r.fetched_at.isoformat(),
-        )
-        for r in rows
-    ]
+    return [ExchangeRateDailyResponse.model_validate(r) for r in rows]

@@ -11,7 +11,7 @@ scraper = KISScraper()
 result = scraper.fetch_comp_interest(
     fid_cond_mrkt_div_code="I",
     fid_cond_scr_div_code="20702",
-    fid_div_cls_code="1",
+    fid_div_cls_code="0",
     fid_div_cls_code1="",
 )
 

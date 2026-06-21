@@ -62,7 +62,7 @@ _KIS_BCDT_CODE_MAP: dict[str, tuple[str, str]] = {
 
 _KIS_MARKET_DIV_CODE = "I"
 _KIS_SCREEN_DIV_CODE = "20702"
-_KIS_CLS_CODE = "1"
+_KIS_CLS_CODE = "0"
 
 
 class YieldService:

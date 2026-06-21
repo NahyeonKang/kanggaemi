@@ -4,7 +4,7 @@ app/schemas/exchange_rate.py
 Pydantic schemas for the exchange rate domain.
 
 Two scraping modes are modeled separately:
-  - Intraday summary (조회기준=1): one summary row per date
+  - Intraday summary (조회기준=1): append-only snapshot per (date, observed_at)
     → KBUsdKrwIntradaySummary
   - Daily series (조회기준=2): daily base-rate rows over a range
     → DailyQuote, KBUsdKrwDailySeries
@@ -14,8 +14,10 @@ service layer. API-layer schemas are used by the FastAPI router.
 """
 import re
 from typing import Optional
+from datetime import datetime
+from decimal import Decimal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -24,21 +26,20 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class KBUsdKrwIntradaySummary(BaseModel):
-    """
-    Intraday USD/KRW summary returned by KBExchangeRateScraper.
+    """장중 요약 스냅샷 1건."""
 
-    Parsed from the #summary1 / #summary3 tables (one row per date).
-    """
+    model_config = ConfigDict(from_attributes=True)
 
-    source: str = "kb_bank"
-    currency: str = "USD/KRW"
-    target_date: str                  # YYYY.MM.DD
-    fetched_at: str                   # ISO datetime string
-    first_rate: float                 # 최초 회차
-    last_rate: float                  # 최종 회차
-    daily_low: float                  # 일최저
-    daily_high: float                 # 일최고
-    daily_avg: float                  # 일평균
+    source: str = "KB"
+    base_ccy: str = "USD"
+    quote_ccy: str = "KRW"
+    target_date: str                 # "YYYY.MM.DD" (event date)
+    observed_at: datetime            # 스냅샷이 반영하는 시점 (tz-aware)
+    first_rate: Decimal
+    last_rate: Decimal
+    daily_low: Decimal
+    daily_high: Decimal
+    daily_avg: Decimal
 
 
 # ---------------------------------------------------------------------------
@@ -47,21 +48,24 @@ class KBUsdKrwIntradaySummary(BaseModel):
 
 
 class DailyQuote(BaseModel):
-    """Single daily base-rate row returned by the scraper."""
+    model_config = ConfigDict(from_attributes=True)
 
-    quote_date: str                   # YYYY.MM.DD
-    base_rate: float                  # 매매 기준율
+    quote_date: str                  # "YYYY.MM.DD"
+    base_rate: Decimal
 
 
 class KBUsdKrwDailySeries(BaseModel):
-    """Normalized daily USD/KRW series returned by KBExchangeRateScraper."""
+    """일별 종가 시리즈."""
 
-    source: str = "kb_bank"
-    currency: str = "USD/KRW"
-    start_date: str                   # YYYY.MM.DD
-    end_date: str                     # YYYY.MM.DD
-    fetched_at: str                   # ISO datetime string
-    quotes: list[DailyQuote] = Field(default_factory=list)
+    model_config = ConfigDict(from_attributes=True)
+
+    source: str = "KB"
+    base_ccy: str = "USD"
+    quote_ccy: str = "KRW"
+    start_date: str
+    end_date: str
+    observed_at: datetime            # 시리즈 fetch 시각 (tz-aware)
+    quotes: list[DailyQuote]
 
 
 # ---------------------------------------------------------------------------
@@ -87,29 +91,43 @@ class ExchangeRateSummarySyncRequest(BaseModel):
 
 
 class ExchangeRateSummaryResponse(BaseModel):
-    """Intraday summary for API responses."""
+    """저장된 장중 스냅샷 1건 (GET 응답). ORM 행에서 직접 매핑."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     source: str
-    currency_code: str
+    base_ccy: str
+    quote_ccy: str
     target_date: str
-    first_rate: float
-    last_rate: float
-    daily_low: float
-    daily_high: float
-    daily_avg: float
-    fetched_at: str
+    observed_at: datetime
+    first_rate: Decimal
+    last_rate: Decimal
+    daily_low: Decimal
+    daily_high: Decimal
+    daily_avg: Decimal
+    ingested_at: datetime
 
-    model_config = {"from_attributes": True}
+
+class ExchangeRateSnapshotValues(BaseModel):
+    """sync 응답에서 에코하는 스냅샷 값."""
+
+    first_rate: Decimal
+    last_rate: Decimal
+    daily_low: Decimal
+    daily_high: Decimal
+    daily_avg: Decimal
 
 
 class ExchangeRateSummarySyncResponse(BaseModel):
     """Response body for the intraday summary sync endpoint."""
 
     source: str
-    currency_code: str
+    base_ccy: str
+    quote_ccy: str
     target_date: Optional[str]
+    observed_at: datetime
     affected_count: int
-    summary: ExchangeRateSummaryResponse
+    snapshot: ExchangeRateSnapshotValues
 
 
 # ---------------------------------------------------------------------------
@@ -136,23 +154,33 @@ class ExchangeRateRangeSyncRequest(BaseModel):
 
 
 class ExchangeRateDailyResponse(BaseModel):
-    """Single daily quote for API responses."""
+    """저장된 일별 종가 1건 (GET 응답). ORM 행에서 직접 매핑."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     source: str
-    currency_code: str
+    base_ccy: str
+    quote_ccy: str
     quote_date: str
-    base_rate: float
-    fetched_at: str
+    base_rate: Decimal
+    ingested_at: datetime
 
-    model_config = {"from_attributes": True}
+
+class ExchangeRateDailySyncQuote(BaseModel):
+    """sync 응답에서 에코하는 일별 값(최소 필드)."""
+
+    quote_date: str
+    base_rate: Decimal
 
 
 class ExchangeRateRangeSyncResponse(BaseModel):
     """Response body for the daily series sync endpoint."""
 
     source: str
-    currency_code: str
+    base_ccy: str
+    quote_ccy: str
     start_date: str
     end_date: str
+    observed_at: datetime
     affected_count: int
-    quotes: list[ExchangeRateDailyResponse]
+    quotes: list[ExchangeRateDailySyncQuote]

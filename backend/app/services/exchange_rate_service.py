@@ -1,7 +1,7 @@
 """
 app/services/exchange_rate_service.py
 
-Business logic for exchange rate data: scraping, persistence, and retrieval.
+환율 비즈니스 로직: 스크래핑, 적재, 조회.
 """
 import logging
 import re
@@ -13,7 +13,7 @@ import holidays
 from sqlalchemy.orm import Session
 
 from app.models.exchange_rate import (
-    ExchangeRateSummaryModel,
+    ExchangeRateIntradaySnapshotModel,
     ExchangeRateDailyModel,
 )
 from app.repositories.exchange_rate_repository import ExchangeRateRepository
@@ -29,7 +29,7 @@ class ExchangeRateService:
         self._kst = ZoneInfo("Asia/Seoul")
         self._kr_holidays = holidays.KR()
 
-    # ── 장중 요약 ────────────────────────────────────────────
+    # ── 장중 스냅샷 ──────────────────────────────────────────
     def sync_usdkrw_summary(
         self, db: Session, search_date: Optional[str] = None
     ) -> dict:
@@ -41,33 +41,47 @@ class ExchangeRateService:
         logger.info("Syncing USD/KRW summary for %s.", resolved)
 
         data = self._scraper.fetch_usdkrw_summary(search_date=resolved)
-        affected = self._repo.upsert_summary(db, data)
-        currency_code = data.currency.split("/")[0]
+        affected = self._repo.insert_snapshot(db, data)
 
         return {
             "source": data.source,
-            "currency_code": currency_code,
+            "base_ccy": data.base_ccy,
+            "quote_ccy": data.quote_ccy,
             "target_date": data.target_date,
+            "observed_at": data.observed_at.isoformat(),
             "affected_count": affected,
-            "summary": {
-                "source": data.source,
-                "currency_code": currency_code,
-                "target_date": data.target_date,
+            "snapshot": {
                 "first_rate": data.first_rate,
                 "last_rate": data.last_rate,
                 "daily_low": data.daily_low,
                 "daily_high": data.daily_high,
                 "daily_avg": data.daily_avg,
-                "fetched_at": data.fetched_at,
             },
         }
 
-    def get_summary(
-        self, db: Session, currency_code: str, target_date: str
-    ) -> Optional[ExchangeRateSummaryModel]:
+    def get_latest_summary(
+        self,
+        db: Session,
+        target_date: str,
+        base_ccy: str = "USD",
+        quote_ccy: str = "KRW",
+    ) -> Optional[ExchangeRateIntradaySnapshotModel]:
+        """해당 거래일의 현재(가장 최근) 스냅샷."""
         normalized = self._normalize_to_yyyy_mm_dd(target_date)
-        return self._repo.get_summary_by_date(
-            db, currency_code=currency_code, target_date=normalized
+        return self._repo.get_latest_snapshot(db, base_ccy, quote_ccy, normalized)
+
+    def get_summary_asof(
+        self,
+        db: Session,
+        target_date: str,
+        as_of: datetime,
+        base_ccy: str = "USD",
+        quote_ccy: str = "KRW",
+    ) -> Optional[ExchangeRateIntradaySnapshotModel]:
+        """as_of 시점 기준 point-in-time 스냅샷. as_of는 tz-aware로 전달."""
+        normalized = self._normalize_to_yyyy_mm_dd(target_date)
+        return self._repo.get_snapshot_asof(
+            db, base_ccy, quote_ccy, normalized, as_of
         )
 
     # ── 일별 종가 ────────────────────────────────────────────
@@ -81,22 +95,17 @@ class ExchangeRateService:
 
         data = self._scraper.fetch_usdkrw_range(start_date=start, end_date=end)
         affected = self._repo.upsert_daily_quotes(db, data)
-        currency_code = data.currency.split("/")[0]
 
         return {
             "source": data.source,
-            "currency_code": currency_code,
+            "base_ccy": data.base_ccy,
+            "quote_ccy": data.quote_ccy,
             "start_date": data.start_date,
             "end_date": data.end_date,
+            "observed_at": data.observed_at.isoformat(),
             "affected_count": affected,
             "quotes": [
-                {
-                    "source": data.source,
-                    "currency_code": currency_code,
-                    "quote_date": q.quote_date,
-                    "base_rate": q.base_rate,
-                    "fetched_at": data.fetched_at,
-                }
+                {"quote_date": q.quote_date, "base_rate": q.base_rate}
                 for q in data.quotes
             ],
         }
@@ -104,15 +113,14 @@ class ExchangeRateService:
     def get_daily(
         self,
         db: Session,
-        currency_code: str,
         start_date: str,
         end_date: str,
+        base_ccy: str = "USD",
+        quote_ccy: str = "KRW",
     ) -> list[ExchangeRateDailyModel]:
         start = self._normalize_to_yyyy_mm_dd(start_date)
         end = self._normalize_to_yyyy_mm_dd(end_date)
-        return self._repo.get_daily_quotes(
-            db, currency_code=currency_code, start_date=start, end_date=end
-        )
+        return self._repo.get_daily_quotes(db, base_ccy, quote_ccy, start, end)
 
     # ── Private helpers ──────────────────────────────────────
     @staticmethod

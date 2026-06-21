@@ -1,15 +1,15 @@
 """
 app/repositories/exchange_rate_repository.py
 
-Data access layer for exchange rate data.
+환율 데이터 접근 계층.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from app.models.exchange_rate import (
-    ExchangeRateSummaryModel,
+    ExchangeRateIntradaySnapshotModel,
     ExchangeRateDailyModel,
 )
 from app.schemas.exchange_rate import (
@@ -20,117 +20,159 @@ from app.schemas.exchange_rate import (
 logger = logging.getLogger(__name__)
 
 
-def _parse_fetched_at(value: str | None) -> datetime:
-    return datetime.fromisoformat(value) if value else datetime.utcnow()
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class ExchangeRateRepository:
-    """Repository for exchange rate summary and daily tables."""
+    """Repository for exchange rate snapshot and daily tables."""
 
-    # ── 장중 요약 ────────────────────────────────────────────
-    def upsert_summary(self, db: Session, data: KBUsdKrwIntradaySummary) -> int:
-        """Insert or update one summary row. Returns affected row count (0 or 1)."""
-        source = data.source
-        currency_code = data.currency.split("/")[0]
-        target_date = data.target_date
-        fetched_at = _parse_fetched_at(data.fetched_at)
+    # ── 장중 스냅샷 (append-only) ─────────────────────────────
+    def insert_snapshot(self, db: Session, data: KBUsdKrwIntradaySummary) -> int:
+        """
+        fetch마다 1행 append. 같은 (source, 통화쌍, target_date, observed_at) 재수집 skip. 
+        return: 신규 삽입 행 수(0 또는 1).
 
-        existing = (
-            db.query(ExchangeRateSummaryModel)
+        NOTE(운영): 단일 writer 가정의 check-then-insert. 동시 writer라면
+        Postgres ON CONFLICT (uq_fx_intraday_snapshot) DO NOTHING 권장.
+        """
+        exists = (
+            db.query(ExchangeRateIntradaySnapshotModel.id)
             .filter_by(
-                source=source,
-                currency_code=currency_code,
-                target_date=target_date,
+                source=data.source,
+                base_ccy=data.base_ccy,
+                quote_ccy=data.quote_ccy,
+                target_date=data.target_date,
+                observed_at=data.observed_at,
             )
             .first()
         )
-        if existing:
-            existing.first_rate = data.first_rate
-            existing.last_rate = data.last_rate
-            existing.daily_low = data.daily_low
-            existing.daily_high = data.daily_high
-            existing.daily_avg = data.daily_avg
-            existing.fetched_at = fetched_at
-        else:
-            db.add(
-                ExchangeRateSummaryModel(
-                    source=source,
-                    currency_code=currency_code,
-                    target_date=target_date,
-                    first_rate=data.first_rate,
-                    last_rate=data.last_rate,
-                    daily_low=data.daily_low,
-                    daily_high=data.daily_high,
-                    daily_avg=data.daily_avg,
-                    fetched_at=fetched_at,
-                )
+        if exists:
+            logger.info(
+                "Snapshot exists for %s/%s %s @ %s, skipping.",
+                data.base_ccy, data.quote_ccy, data.target_date, data.observed_at,
             )
+            return 0
 
+        db.add(
+            ExchangeRateIntradaySnapshotModel(
+                source=data.source,
+                base_ccy=data.base_ccy,
+                quote_ccy=data.quote_ccy,
+                target_date=data.target_date,
+                observed_at=data.observed_at,
+                first_rate=data.first_rate,
+                last_rate=data.last_rate,
+                daily_low=data.daily_low,
+                daily_high=data.daily_high,
+                daily_avg=data.daily_avg,
+                ingested_at=_utcnow(),
+            )
+        )
         db.commit()
-        logger.info("Upserted summary for %s %s.", currency_code, target_date)
+        logger.info(
+            "Inserted snapshot for %s/%s %s @ %s.",
+            data.base_ccy, data.quote_ccy, data.target_date, data.observed_at,
+        )
         return 1
 
-    def get_summary_by_date(
-        self, db: Session, currency_code: str, target_date: str
-    ) -> ExchangeRateSummaryModel | None:
-        """Return the summary row for a given currency and date, or None."""
+    def get_latest_snapshot(
+        self, db: Session, base_ccy: str, quote_ccy: str, target_date: str
+    ) -> ExchangeRateIntradaySnapshotModel | None:
+        """해당 거래일의 가장 최근 스냅샷(현재 상태)."""
         return (
-            db.query(ExchangeRateSummaryModel)
-            .filter_by(currency_code=currency_code, target_date=target_date)
+            db.query(ExchangeRateIntradaySnapshotModel)
+            .filter_by(base_ccy=base_ccy, quote_ccy=quote_ccy, target_date=target_date)
+            .order_by(ExchangeRateIntradaySnapshotModel.observed_at.desc())
             .first()
         )
 
-    # ── 일별 종가 ────────────────────────────────────────────
-    def upsert_daily_quotes(self, db: Session, data: KBUsdKrwDailySeries) -> int:
-        """Insert or update daily rows. Returns affected row count."""
-        source = data.source
-        currency_code = data.currency.split("/")[0]
-        fetched_at = _parse_fetched_at(data.fetched_at)
+    def get_snapshot_asof(
+        self,
+        db: Session,
+        base_ccy: str,
+        quote_ccy: str,
+        target_date: str,
+        as_of: datetime,
+    ) -> ExchangeRateIntradaySnapshotModel | None:
+        """
+        as_of 시점에 '그때 알던' 가장 최근 스냅샷(point-in-time).
+        as_of는 tz-aware로 전달할 것(observed_at이 tz-aware이므로).
+        """
+        return (
+            db.query(ExchangeRateIntradaySnapshotModel)
+            .filter_by(base_ccy=base_ccy, quote_ccy=quote_ccy, target_date=target_date)
+            .filter(ExchangeRateIntradaySnapshotModel.observed_at <= as_of)
+            .order_by(ExchangeRateIntradaySnapshotModel.observed_at.desc())
+            .first()
+        )
 
+    def get_snapshots(
+        self, db: Session, base_ccy: str, quote_ccy: str, target_date: str
+    ) -> list[ExchangeRateIntradaySnapshotModel]:
+        """해당 거래일 전체 스냅샷 시계열(intraday_significant 파생 등)."""
+        return (
+            db.query(ExchangeRateIntradaySnapshotModel)
+            .filter_by(base_ccy=base_ccy, quote_ccy=quote_ccy, target_date=target_date)
+            .order_by(ExchangeRateIntradaySnapshotModel.observed_at.asc())
+            .all()
+        )
+
+    # ── 일별 종가 (upsert; base_rate 변동 시에만 갱신) ─────────
+    def upsert_daily_quotes(self, db: Session, data: KBUsdKrwDailySeries) -> int:
+        """Insert or update daily rows. 반환: 신규+변경 행 수."""
+        now = _utcnow()
         affected = 0
         for quote in data.quotes:
             existing = (
                 db.query(ExchangeRateDailyModel)
                 .filter_by(
-                    source=source,
-                    currency_code=currency_code,
+                    source=data.source,
+                    base_ccy=data.base_ccy,
+                    quote_ccy=data.quote_ccy,
                     quote_date=quote.quote_date,
                 )
                 .first()
             )
             if existing:
-                existing.base_rate = quote.base_rate
-                existing.fetched_at = fetched_at
+                if existing.base_rate != quote.base_rate:   # 값 변동 시에만
+                    existing.base_rate = quote.base_rate
+                    existing.ingested_at = now
+                    affected += 1
             else:
                 db.add(
                     ExchangeRateDailyModel(
-                        source=source,
-                        currency_code=currency_code,
+                        source=data.source,
+                        base_ccy=data.base_ccy,
+                        quote_ccy=data.quote_ccy,
                         quote_date=quote.quote_date,
                         base_rate=quote.base_rate,
-                        fetched_at=fetched_at,
+                        ingested_at=now,
                     )
                 )
-            affected += 1
+                affected += 1
 
         db.commit()
         logger.info(
-            "Upserted %d daily quotes for %s.", affected, currency_code
+            "Upserted %d daily quotes for %s/%s.",
+            affected, data.base_ccy, data.quote_ccy,
         )
         return affected
 
     def get_daily_quotes(
         self,
         db: Session,
-        currency_code: str,
+        base_ccy: str,
+        quote_ccy: str,
         start_date: str,
         end_date: str,
     ) -> list[ExchangeRateDailyModel]:
-        """Return daily rows within [start_date, end_date], oldest first."""
+        """[start_date, end_date] 구간 일별 행, 오래된 순."""
         return (
             db.query(ExchangeRateDailyModel)
             .filter(
-                ExchangeRateDailyModel.currency_code == currency_code,
+                ExchangeRateDailyModel.base_ccy == base_ccy,
+                ExchangeRateDailyModel.quote_ccy == quote_ccy,
                 ExchangeRateDailyModel.quote_date >= start_date,
                 ExchangeRateDailyModel.quote_date <= end_date,
             )

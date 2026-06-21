@@ -9,7 +9,7 @@ from app.scrapers.bok.bok_scraper import BOKScraper
 scraper = BOKScraper()
 
 # 817Y002 / D / 010210000 = 금리 종합, 일별, 국고채(10년) — used by yield_daily ('KR', '10Y')
-result = scraper.fetch_last_1y_series(stat_code="817Y002", item_code="010210000")
+result = scraper.fetch_last_1y_series(stat_code="817Y002", item_code="010901000")
 
 print(f"source       : {result.source}")
 print(f"stat_code    : {result.stat_code}")

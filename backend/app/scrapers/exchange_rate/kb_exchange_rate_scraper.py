@@ -10,7 +10,9 @@ Two query modes against the KB quics component endpoint:
 import logging
 import re
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import requests
 from bs4 import BeautifulSoup
@@ -23,6 +25,8 @@ from app.schemas.exchange_rate import (
 from app.scrapers.exchange_rate.base import BaseExchangeRateScraper
 
 logger = logging.getLogger(__name__)
+
+_KST = ZoneInfo("Asia/Seoul")
 
 _QUERY_URL = (
     "https://obank.kbstar.com/quics"
@@ -50,11 +54,7 @@ class KBExchangeRateScraper(BaseExchangeRateScraper):
     Usage::
 
         scraper = KBExchangeRateScraper()
-
-        # intraday summary for a date
         summary = scraper.fetch_usdkrw_summary(search_date="20260612")
-
-        # daily base-rate series over a range
         series = scraper.fetch_usdkrw_range("20250614", "20260614")
     """
 
@@ -71,8 +71,7 @@ class KBExchangeRateScraper(BaseExchangeRateScraper):
         self, search_date: Optional[str] = None
     ) -> KBUsdKrwIntradaySummary:
         """
-        Fetch the intraday summary (first/last round, daily low/high/avg)
-        for the given date.
+        Fetch the intraday summary (first/last round, daily low/high/avg).
 
         Args:
             search_date: YYYYMMDD. Defaults to today.
@@ -88,8 +87,10 @@ class KBExchangeRateScraper(BaseExchangeRateScraper):
         summary = self._parse_summary(html)
         logger.info("Extracted intraday summary for %s.", _format_date(search_date))
         return KBUsdKrwIntradaySummary(
+            base_ccy="USD",
+            quote_ccy="KRW",
             target_date=_format_date(search_date),
-            fetched_at=datetime.now().isoformat(),
+            observed_at=datetime.now(_KST),   # valid time (tz-aware)
             **summary,
         )
 
@@ -123,9 +124,11 @@ class KBExchangeRateScraper(BaseExchangeRateScraper):
             len(quotes), start_date, end_date,
         )
         return KBUsdKrwDailySeries(
+            base_ccy="USD",
+            quote_ccy="KRW",
             start_date=_format_date(start_date),
             end_date=_format_date(end_date),
-            fetched_at=datetime.now().isoformat(),
+            observed_at=datetime.now(_KST),
             quotes=quotes,
         )
 
@@ -166,7 +169,7 @@ class KBExchangeRateScraper(BaseExchangeRateScraper):
         }
         parsed = {}
         for name, raw in fields.items():
-            value = _to_float(raw)
+            value = _to_decimal(raw)
             if value is None:
                 raise ValueError(f"Failed to parse summary field {name!r}: {raw!r}")
             parsed[name] = value
@@ -186,7 +189,7 @@ class KBExchangeRateScraper(BaseExchangeRateScraper):
             if len(cells) < 2:
                 continue
             quote_date = cells[0].get_text(" ", strip=True)
-            base_rate = _to_float(cells[1].get_text(" ", strip=True))
+            base_rate = _to_decimal(cells[1].get_text(" ", strip=True))
             if not re.match(r"^\d{4}\.\d{2}\.\d{2}$", quote_date) or base_rate is None:
                 continue
             quotes.append(DailyQuote(quote_date=quote_date, base_rate=base_rate))
@@ -291,8 +294,8 @@ def _format_date(yyyymmdd: str) -> str:
     return f"{yyyymmdd[:4]}.{yyyymmdd[4:6]}.{yyyymmdd[6:]}"
 
 
-def _to_float(value: str) -> Optional[float]:
-    """Parse a numeric string, stripping commas and whitespace."""
+def _to_decimal(value: str) -> Optional[Decimal]:
+    """Parse a numeric string into Decimal, stripping commas and whitespace."""
     text = str(value).strip().replace(",", "")
     if not text:
         return None
@@ -300,6 +303,6 @@ def _to_float(value: str) -> Optional[float]:
     if not match:
         return None
     try:
-        return float(match.group(0))
-    except ValueError:
+        return Decimal(match.group(0))
+    except (InvalidOperation, ValueError):
         return None
