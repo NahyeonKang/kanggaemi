@@ -1,152 +1,92 @@
 """
 app/schemas/yield_rate.py
 
-Pydantic schemas for the yield domain (interest rates), split by
-time-resolution:
-  - yield_daily    : official daily close yields, sourced from FRED (US) and
-                      BOK (KR)
-  - yield_snapshot : latest KIS comp-interest snapshot, one row per
-                      (country, tenor)
-
-Scraper-layer schemas (BOKSeries*, KISCompInterest*) are used internally by
-BOKScraper / KISScraper and the yield service. FRED scraper output reuses
-FredSeriesData / FredObservation from app.schemas.macro_indicator, since
-fred_scraper.fetch_series is shared by both the macro and yield domains.
-
-API-layer schemas are used by the FastAPI routers.
+금리 도메인 스키마.
+  - scraper-layer: BOK 시리즈 / KIS comp-interest (Decimal, observed_at).
+  - 내부 record: YieldSnapshotRecord (스냅샷 insert 입력).
+  - API-layer: 관측/스냅샷 응답 (resolution, observed_at, ingested_at).
 """
+from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
 
 
-# ---------------------------------------------------------------------------
-# Scraper-layer schemas
-# ---------------------------------------------------------------------------
-
-
+# ── scraper-layer (BOK) ──────────────────────────────────────
 class BOKSeriesObservation(BaseModel):
-    """Single daily observation returned by BOKScraper.fetch_series."""
+    model_config = ConfigDict(from_attributes=True)
 
-    observation_date: str           # YYYY-MM-DD
-    value: Optional[float] = None
+    observation_date: str                  # "YYYY-MM-DD"
+    value: Optional[Decimal] = None
 
 
 class BOKSeriesData(BaseModel):
-    """Normalized ECOS StatisticSearch result returned by BOKScraper."""
+    model_config = ConfigDict(from_attributes=True)
 
     source: str = "bok"
     stat_code: str
     item_code: str
-    observations: list[BOKSeriesObservation] = Field(default_factory=list)
-    fetched_at: str
+    resolution: str = "D"                  # "D" | "M"
+    observed_at: datetime
+    observations: list[BOKSeriesObservation]
 
 
+# ── scraper-layer (KIS) ──────────────────────────────────────
 class KISCompInterestItem(BaseModel):
-    """Single bond rate row from the KIS comp-interest output1."""
-
-    bcdt_code: str                              # 자료코드
-    hts_kor_isnm: str                           # HTS한글종목명
-    bond_mnrt_prpr: str                         # 채권금리현재가
-    prdy_vrss_sign: Optional[str] = None        # 전일대비부호
-    bond_mnrt_prdy_vrss: Optional[str] = None   # 채권금리전일대비
-    prdy_ctrt: Optional[str] = None             # 전일대비율
-    stck_bsop_date: str                         # 주식영업일자 (YYYYMMDD)
+    bcdt_code: str
+    hts_kor_isnm: str = ""
+    bond_mnrt_prpr: Optional[str] = None         # 원시 문자열 (service에서 Decimal 변환)
+    prdy_vrss_sign: Optional[str] = None
+    bond_mnrt_prdy_vrss: Optional[str] = None
+    prdy_ctrt: Optional[str] = None
+    stck_bsop_date: str = ""
 
 
 class KISCompInterestData(BaseModel):
-    """Normalized comp-interest result returned by KISScraper."""
+    model_config = ConfigDict(from_attributes=True)
 
     source: str = "kis"
-    output1: list[KISCompInterestItem] = Field(default_factory=list)
-    fetched_at: str
+    observed_at: datetime                  # fetch 시각 (tz-aware)
+    output1: list[KISCompInterestItem]
 
 
-# ---------------------------------------------------------------------------
-# Persistence-layer schema
-# ---------------------------------------------------------------------------
-
-
+# ── 내부 record (snapshot insert 입력) ───────────────────────
 class YieldSnapshotRecord(BaseModel):
-    """A single normalized yield_snapshot row ready for persistence."""
-
-    country: str
-    tenor: str
-    current_rate: Optional[float] = None
-    prdy_vrss_sign: Optional[str] = None
-    prdy_vrss: Optional[float] = None
-    prdy_ctrt: Optional[float] = None
-    base_date: str          # YYYYMMDD
     source: str = "kis"
-    fetched_at: str         # ISO datetime string
-
-
-# ---------------------------------------------------------------------------
-# API-layer schemas — yield_daily
-# ---------------------------------------------------------------------------
-
-
-class YieldDailySyncRequest(BaseModel):
-    """Request body for POST /yield/daily/sync."""
-
-    country: str    # 'KR' / 'US'
-    tenor: str       # '10Y', '3Y', '30Y', 'SOFR', '2Y', 'KOFR', 'CD91', 'CORP3Y_AA'
-
-
-class YieldDailySyncResponse(BaseModel):
-    """Response body for POST /yield/daily/sync."""
-
     country: str
     tenor: str
+    current_rate: Optional[Decimal] = None
+    prdy_vrss_sign: Optional[str] = None
+    prdy_vrss: Optional[Decimal] = None
+    prdy_ctrt: Optional[Decimal] = None
+    base_date: str = ""
+    observed_at: datetime
+
+
+# ── API-layer ────────────────────────────────────────────────
+class YieldObservationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     source: str
-    affected_count: int
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-
-
-class YieldDailySyncAllResponse(BaseModel):
-    """Response body for POST /yield/daily/sync-all."""
-
-    results: list[YieldDailySyncResponse] = Field(default_factory=list)
-
-
-class YieldDailyResponse(BaseModel):
-    """Single daily yield observation for GET /yield/daily responses."""
-
     country: str
     tenor: str
-    d: str                       # YYYY-MM-DD
-    close: Optional[float] = None
-    source: str
-    ingested_at: str
-
-    model_config = {"from_attributes": True}
-
-
-# ---------------------------------------------------------------------------
-# API-layer schemas — yield_snapshot
-# ---------------------------------------------------------------------------
-
-
-class YieldSnapshotSyncResponse(BaseModel):
-    """Response body for POST /yield/snapshot/sync."""
-
-    source: str
-    affected_count: int
-    tenors: list[str] = Field(default_factory=list)
+    resolution: str
+    observation_date: str
+    close: Optional[Decimal]
+    ingested_at: datetime
 
 
 class YieldSnapshotResponse(BaseModel):
-    """Single latest snapshot for GET /yield/snapshot responses."""
+    model_config = ConfigDict(from_attributes=True)
 
+    source: str
     country: str
     tenor: str
-    current_rate: Optional[float] = None
-    prdy_vrss_sign: Optional[str] = None
-    prdy_vrss: Optional[float] = None
-    prdy_ctrt: Optional[float] = None
-    base_date: Optional[str] = None
-    source: str
-    fetched_at: str
-
-    model_config = {"from_attributes": True}
+    current_rate: Optional[Decimal]
+    prdy_vrss_sign: Optional[str]
+    prdy_vrss: Optional[Decimal]
+    prdy_ctrt: Optional[Decimal]
+    base_date: str
+    observed_at: datetime
+    ingested_at: datetime

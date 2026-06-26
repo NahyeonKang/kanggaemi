@@ -1,92 +1,89 @@
 """
 app/repositories/macro_indicator_repository.py
 
-Data access layer for macro indicator observations.
-All DB reads and writes go through this class.
+매크로 관측 데이터 접근 계층 (macro_observation).
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+from decimal import Decimal
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.macro_indicator import MacroIndicatorObservationModel
-from app.schemas.macro_indicator import FredSeriesData
+from app.models.macro_indicator import MacroObservationModel
 
 logger = logging.getLogger(__name__)
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class MacroIndicatorRepository:
-    """Repository for the macro_indicator_observations table."""
+    """Repository for the macro_observation table."""
 
-    def upsert_series_data(self, db: Session, data: FredSeriesData) -> int:
-        """
-        Insert or update observations from a FredSeriesData result.
-
-        Matches existing rows on (source, series_id, observation_date).
-        Updates value and fetched_at if a row already exists; inserts otherwise.
-
-        Returns:
-            Number of rows inserted or updated.
-        """
-        source    = data.source
-        series_id = data.series_id
-
+    def upsert_observations(
+        self,
+        db: Session,
+        source: str,
+        series_id: str,
+        resolution: str,
+        rows: list[tuple[str, Optional[Decimal]]],
+    ) -> int:
+        """rows: [(observation_date, value)]. 값 변동/신규일 때만 카운트."""
+        now = _utcnow()
         affected = 0
-        for obs in data.observations:
-            fetched_at = datetime.fromisoformat(obs.fetched_at)
-
+        for observation_date, value in rows:
             existing = (
-                db.query(MacroIndicatorObservationModel)
+                db.query(MacroObservationModel)
                 .filter_by(
                     source=source,
                     series_id=series_id,
-                    observation_date=obs.observation_date,
+                    resolution=resolution,
+                    observation_date=observation_date,
                 )
                 .first()
             )
             if existing:
-                existing.value     = obs.value
-                existing.fetched_at = fetched_at
+                if existing.value != value:
+                    existing.value = value
+                    existing.ingested_at = now
+                    affected += 1
             else:
                 db.add(
-                    MacroIndicatorObservationModel(
+                    MacroObservationModel(
                         source=source,
                         series_id=series_id,
-                        observation_date=obs.observation_date,
-                        value=obs.value,
-                        fetched_at=fetched_at,
+                        resolution=resolution,
+                        observation_date=observation_date,
+                        value=value,
+                        ingested_at=now,
                     )
                 )
-            affected += 1
+                affected += 1
 
         db.commit()
-        logger.info("Upserted %d observations for %s.", affected, series_id)
+        logger.info(
+            "Upserted %d macro obs for %s (%s).", affected, series_id, resolution
+        )
         return affected
 
-    def get_series(
+    def get_observations(
         self,
         db: Session,
         series_id: str,
         start_date: str,
         end_date: str,
-    ) -> list[MacroIndicatorObservationModel]:
-        """
-        Return observations for a given series within a date range,
-        ordered by observation_date ascending.
-
-        Args:
-            db: SQLAlchemy session.
-            series_id: FRED series identifier (e.g. "DGS10").
-            start_date: Start date inclusive, YYYY-MM-DD.
-            end_date: End date inclusive, YYYY-MM-DD.
-        """
+        resolution: str = "D",
+    ) -> list[MacroObservationModel]:
         return (
-            db.query(MacroIndicatorObservationModel)
+            db.query(MacroObservationModel)
             .filter(
-                MacroIndicatorObservationModel.series_id == series_id,
-                MacroIndicatorObservationModel.observation_date >= start_date,
-                MacroIndicatorObservationModel.observation_date <= end_date,
+                MacroObservationModel.series_id == series_id,
+                MacroObservationModel.resolution == resolution,
+                MacroObservationModel.observation_date >= start_date,
+                MacroObservationModel.observation_date <= end_date,
             )
-            .order_by(MacroIndicatorObservationModel.observation_date.asc())
+            .order_by(MacroObservationModel.observation_date.asc())
             .all()
         )

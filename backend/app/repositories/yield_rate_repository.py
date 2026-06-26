@@ -1,144 +1,172 @@
 """
 app/repositories/yield_rate_repository.py
 
-Data access layer for the yield domain (yield_daily, yield_snapshot tables).
-All DB reads and writes go through this class.
+금리 도메인 데이터 접근 계층.
+  - yield_observation : 값 변동 시에만 갱신.
+  - yield_intraday_snapshot : append-only, as-of 조회.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from app.models.yield_rate import YieldDailyModel, YieldSnapshotModel
+from app.models.yield_rate import YieldObservationModel, YieldIntradaySnapshotModel
 from app.schemas.yield_rate import YieldSnapshotRecord
 
 logger = logging.getLogger(__name__)
 
 
-class YieldRateRepository:
-    """Repository for the yield_daily and yield_snapshot tables."""
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
-    def upsert_daily(
+
+class YieldRateRepository:
+    """Repository for yield_observation and yield_intraday_snapshot tables."""
+
+    # ── 관측 시계열 (daily/monthly) ──────────────────────────
+    def upsert_observations(
         self,
         db: Session,
+        source: str,
         country: str,
         tenor: str,
-        source: str,
-        rows: list[tuple[str, Optional[float]]],
+        resolution: str,
+        rows: list[tuple[str, Optional[Decimal]]],
     ) -> int:
-        """
-        Insert or update daily close yields for a (country, tenor).
-
-        Matches existing rows on (country, tenor, d). Updates close and
-        source if a row already exists; inserts otherwise.
-
-        Args:
-            rows: list of (observation_date, close) tuples.
-
-        Returns:
-            Number of rows inserted or updated.
-        """
+        """rows: [(observation_date, close)]. 값 변동/신규일 때만 카운트."""
+        now = _utcnow()
         affected = 0
         for observation_date, close in rows:
-            stmt = sqlite_insert(YieldDailyModel).values(
-                country=country,
-                tenor=tenor,
-                d=observation_date,
-                close=close,
-                source=source,
+            existing = (
+                db.query(YieldObservationModel)
+                .filter_by(
+                    source=source,
+                    country=country,
+                    tenor=tenor,
+                    resolution=resolution,
+                    observation_date=observation_date,
+                )
+                .first()
             )
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["country", "tenor", "d"],
-                set_={
-                    "close": stmt.excluded.close,
-                    "source": stmt.excluded.source,
-                },
-            )
-            db.execute(stmt)
-            affected += 1
+            if existing:
+                if existing.close != close:
+                    existing.close = close
+                    existing.ingested_at = now
+                    affected += 1
+            else:
+                db.add(
+                    YieldObservationModel(
+                        source=source,
+                        country=country,
+                        tenor=tenor,
+                        resolution=resolution,
+                        observation_date=observation_date,
+                        close=close,
+                        ingested_at=now,
+                    )
+                )
+                affected += 1
 
         db.commit()
-        logger.info("Upserted %d yield_daily rows for %s/%s.", affected, country, tenor)
+        logger.info(
+            "Upserted %d yield obs for %s/%s (%s).",
+            affected, country, tenor, resolution,
+        )
         return affected
 
-    def get_daily(
+    def get_observations(
         self,
         db: Session,
         country: str,
         tenor: str,
+        resolution: str = "D",
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-    ) -> list[YieldDailyModel]:
-        """
-        Return daily yield rows for a (country, tenor), optionally filtered
-        by a date range, ordered by date ascending.
-        """
-        query = db.query(YieldDailyModel).filter(
-            YieldDailyModel.country == country,
-            YieldDailyModel.tenor == tenor,
+    ) -> list[YieldObservationModel]:
+        query = db.query(YieldObservationModel).filter(
+            YieldObservationModel.country == country,
+            YieldObservationModel.tenor == tenor,
+            YieldObservationModel.resolution == resolution,
         )
         if start_date is not None:
-            query = query.filter(YieldDailyModel.d >= start_date)
+            query = query.filter(YieldObservationModel.observation_date >= start_date)
         if end_date is not None:
-            query = query.filter(YieldDailyModel.d <= end_date)
-        return query.order_by(YieldDailyModel.d.asc()).all()
+            query = query.filter(YieldObservationModel.observation_date <= end_date)
+        return query.order_by(YieldObservationModel.observation_date.asc()).all()
 
-    def upsert_snapshot(self, db: Session, snapshot: YieldSnapshotRecord) -> int:
-        """
-        Insert or update the latest snapshot for a (country, tenor).
-
-        Matches the existing row on (country, tenor) and updates all value
-        columns if it exists; inserts otherwise.
-
-        Returns:
-            1 (number of rows affected).
-        """
-        fetched_at = datetime.fromisoformat(snapshot.fetched_at)
-
-        stmt = sqlite_insert(YieldSnapshotModel).values(
-            country=snapshot.country,
-            tenor=snapshot.tenor,
-            current_rate=snapshot.current_rate,
-            prdy_vrss_sign=snapshot.prdy_vrss_sign,
-            prdy_vrss=snapshot.prdy_vrss,
-            prdy_ctrt=snapshot.prdy_ctrt,
-            base_date=snapshot.base_date,
-            source=snapshot.source,
-            fetched_at=fetched_at,
+    # ── 장중 스냅샷 (append-only) ────────────────────────────
+    def insert_snapshot(self, db: Session, rec: YieldSnapshotRecord) -> int:
+        """fetch마다 1행 append. 동일 (source, country, tenor, observed_at) 멱등 skip."""
+        exists = (
+            db.query(YieldIntradaySnapshotModel.id)
+            .filter_by(
+                source=rec.source,
+                country=rec.country,
+                tenor=rec.tenor,
+                observed_at=rec.observed_at,
+            )
+            .first()
         )
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["country", "tenor"],
-            set_={
-                "current_rate": stmt.excluded.current_rate,
-                "prdy_vrss_sign": stmt.excluded.prdy_vrss_sign,
-                "prdy_vrss": stmt.excluded.prdy_vrss,
-                "prdy_ctrt": stmt.excluded.prdy_ctrt,
-                "base_date": stmt.excluded.base_date,
-                "source": stmt.excluded.source,
-                "fetched_at": stmt.excluded.fetched_at,
-            },
+        if exists:
+            return 0
+
+        db.add(
+            YieldIntradaySnapshotModel(
+                source=rec.source,
+                country=rec.country,
+                tenor=rec.tenor,
+                observed_at=rec.observed_at,
+                current_rate=rec.current_rate,
+                prdy_vrss_sign=rec.prdy_vrss_sign,
+                prdy_vrss=rec.prdy_vrss,
+                prdy_ctrt=rec.prdy_ctrt,
+                base_date=rec.base_date,
+                ingested_at=_utcnow(),
+            )
         )
-        db.execute(stmt)
         db.commit()
-        logger.info("Upserted yield_snapshot row for %s/%s.", snapshot.country, snapshot.tenor)
         return 1
 
-    def get_snapshot(self, db: Session, country: str, tenor: str) -> Optional[YieldSnapshotModel]:
-        """Return the latest snapshot for a (country, tenor), or None if absent."""
+    def get_latest_snapshot(
+        self, db: Session, country: str, tenor: str
+    ) -> Optional[YieldIntradaySnapshotModel]:
         return (
-            db.query(YieldSnapshotModel)
+            db.query(YieldIntradaySnapshotModel)
             .filter_by(country=country, tenor=tenor)
+            .order_by(YieldIntradaySnapshotModel.observed_at.desc())
             .first()
         )
 
-    def list_snapshots(self, db: Session, country: Optional[str] = None) -> list[YieldSnapshotModel]:
-        """Return all latest snapshots, optionally filtered by country."""
-        query = db.query(YieldSnapshotModel)
+    def get_snapshot_asof(
+        self, db: Session, country: str, tenor: str, as_of: datetime
+    ) -> Optional[YieldIntradaySnapshotModel]:
+        """as_of 시점 point-in-time 스냅샷. as_of는 tz-aware로 전달."""
+        return (
+            db.query(YieldIntradaySnapshotModel)
+            .filter_by(country=country, tenor=tenor)
+            .filter(YieldIntradaySnapshotModel.observed_at <= as_of)
+            .order_by(YieldIntradaySnapshotModel.observed_at.desc())
+            .first()
+        )
+
+    def list_latest_snapshots(
+        self, db: Session, country: Optional[str] = None
+    ) -> list[YieldIntradaySnapshotModel]:
+        """(country, tenor)별 최신 스냅샷. Postgres DISTINCT ON."""
+        query = db.query(YieldIntradaySnapshotModel)
         if country is not None:
             query = query.filter_by(country=country)
-        return query.order_by(
-            YieldSnapshotModel.country.asc(),
-            YieldSnapshotModel.tenor.asc(),
-        ).all()
+        return (
+            query.distinct(
+                YieldIntradaySnapshotModel.country,
+                YieldIntradaySnapshotModel.tenor,
+            )
+            .order_by(
+                YieldIntradaySnapshotModel.country.asc(),
+                YieldIntradaySnapshotModel.tenor.asc(),
+                YieldIntradaySnapshotModel.observed_at.desc(),
+            )
+            .all()
+        )

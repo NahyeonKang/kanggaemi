@@ -1,71 +1,56 @@
 """
 app/schemas/macro_indicator.py
 
-Pydantic schemas for the macro indicator domain.
-
-Scraper-layer schemas (FredObservation, FredSeriesData) are used internally
-by FredScraper (shared with the yield domain) and the service layer.
-
-API-layer schemas (MacroSyncResponse, MacroObservationResponse) are used
-by the FastAPI router.
+매크로 지표 스키마.
+  - scraper-layer: FRED 시리즈 (Decimal, observed_at).
+  - API-layer: 관측 응답 / sync 응답 (resolution, ingested_at).
 """
+from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
 
 
-# ---------------------------------------------------------------------------
-# Scraper-layer schemas
-# ---------------------------------------------------------------------------
-
-
+# ── scraper-layer (FRED) ─────────────────────────────────────
 class FredObservation(BaseModel):
-    """Single FRED observation returned by the scraper."""
+    model_config = ConfigDict(from_attributes=True)
 
-    source: str = "fred"
-    series_id: str
-    observation_date: str   # YYYY-MM-DD
-    value: Optional[float] = None
-    fetched_at: str         # ISO datetime string
+    observation_date: str                 # "YYYY-MM-DD"
+    value: Optional[Decimal] = None        # 결측("." 등)은 None
 
 
 class FredSeriesData(BaseModel):
-    """Collection of FRED observations for one series."""
+    model_config = ConfigDict(from_attributes=True)
 
     source: str = "fred"
     series_id: str
-    observations: list[FredObservation] = Field(default_factory=list)
-    fetched_at: str
+    observed_at: datetime                  # fetch 시각 (tz-aware)
+    observations: list[FredObservation]
 
 
-# ---------------------------------------------------------------------------
-# API-layer schemas
-# ---------------------------------------------------------------------------
+# ── API-layer ────────────────────────────────────────────────
+class MacroObservationResponse(BaseModel):
+    """저장된 관측 1건 (GET). ORM 행에서 직접 매핑."""
 
+    model_config = ConfigDict(from_attributes=True)
 
-class MacroSyncResponseItem(BaseModel):
-    """Per-series result for POST /macro/us-rates/sync."""
-
+    source: str
     series_id: str
+    resolution: str
+    observation_date: str
+    value: Optional[Decimal]
+    ingested_at: datetime
+
+
+class MacroSeriesSyncResult(BaseModel):
+    series_id: str
+    resolution: str
     affected_count: int
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
+    start_date: Optional[str]
+    end_date: Optional[str]
 
 
 class MacroSyncResponse(BaseModel):
-    """Response body for POST /macro/us-rates/sync."""
-
     source: str
-    series: list[MacroSyncResponseItem]
-
-
-class MacroObservationResponse(BaseModel):
-    """Single observation for GET /macro/series responses."""
-
-    source: str
-    series_id: str
-    observation_date: str
-    value: Optional[float] = None
-    fetched_at: str
-
-    model_config = {"from_attributes": True}
+    series: list[MacroSeriesSyncResult]

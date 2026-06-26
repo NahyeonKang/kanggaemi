@@ -1,15 +1,13 @@
 """
 app/scrapers/kis/kis_scraper.py
 
-KIS (Korea Investment & Securities) Open API scraper for domestic bond
-interest rates: 업종/기타 > 금리 종합(국내채권_금리) [국내주식-155].
-
-A single call returns ALL bond types at once in output1; the yield_snapshot
-service filters the result by bcdt_code to extract the tenors it persists.
+KIS comp-interest scraper (국내채권 금리 종합). 1콜로 전 종목 반환,
+yield service가 bcdt_code로 필터링.
 """
 import logging
 from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from app.schemas.yield_rate import KISCompInterestData, KISCompInterestItem
 from app.scrapers.kis.kis_auth import KISAuthClient, smart_sleep
@@ -19,6 +17,7 @@ logger = logging.getLogger(__name__)
 _TR_ID = "FHPST07020000"
 _COMP_INTEREST_PATH = "/uapi/domestic-stock/v1/quotations/comp-interest"
 _MAX_PAGES = 10
+_KST = ZoneInfo("Asia/Seoul")
 
 
 class KISScraper:
@@ -34,15 +33,7 @@ class KISScraper:
         fid_div_cls_code: str,
         fid_div_cls_code1: str = "",
     ) -> KISCompInterestData:
-        """
-        Fetch 금리 종합(국내채권_금리) data via the KIS comp-interest API.
-
-        Follows continuation pages (tr_cont "M"/"F" in the response header)
-        until exhausted or _MAX_PAGES is reached.
-
-        Raises:
-            ValueError: If the API responds with rt_cd != "0".
-        """
+        """Follows continuation pages (tr_cont M/F) until exhausted or _MAX_PAGES."""
         params = {
             "FID_COND_MRKT_DIV_CODE": fid_cond_mrkt_div_code,
             "FID_COND_SCR_DIV_CODE": fid_cond_scr_div_code,
@@ -76,8 +67,8 @@ class KISScraper:
 
         return KISCompInterestData(
             source="kis",
+            observed_at=datetime.now(_KST),
             output1=output1,
-            fetched_at=datetime.utcnow().isoformat(),
         )
 
 
@@ -89,7 +80,7 @@ def _parse_items(raw: object) -> list[KISCompInterestItem]:
         KISCompInterestItem(
             bcdt_code=row.get("bcdt_code", ""),
             hts_kor_isnm=row.get("hts_kor_isnm", ""),
-            bond_mnrt_prpr=row.get("bond_mnrt_prpr", ""),
+            bond_mnrt_prpr=row.get("bond_mnrt_prpr"),
             prdy_vrss_sign=row.get("prdy_vrss_sign"),
             bond_mnrt_prdy_vrss=row.get("bond_mnrt_prdy_vrss"),
             prdy_ctrt=row.get("prdy_ctrt"),
