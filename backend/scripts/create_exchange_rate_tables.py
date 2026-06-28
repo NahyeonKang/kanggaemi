@@ -18,8 +18,8 @@ import os
 import logging
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.db.base import Base          # ← Base 경로
-from app.db.session import engine      # ← engine 경로 (get_db와 같은 모듈일 가능성 높음)
+from app.db.base import Base
+from app.db.session import engine
 
 # 모델을 import해야 Base.metadata에 테이블이 등록된다.
 from app.models.exchange_rate import (

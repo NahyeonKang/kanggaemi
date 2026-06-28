@@ -18,7 +18,7 @@ from app.scrapers.fred.fred_scraper import FredScraper
 
 logger = logging.getLogger(__name__)
 
-TARGET_SERIES = ["DTWEXBGS", "T10YIE", "DFII10", "NASDAQSOX", "VIXCLS"]
+TARGET_SERIES = ["DTWEXBGS", "T10YIE", "DFII10", "NASDAQSOX", "VIXCLS", "FEDFUNDS"]
 
 # 시리즈별 resolution. 현재 전부 daily, monthly 추가 시 "M"으로 등록.
 _SERIES_RESOLUTION: dict[str, str] = {s: "D" for s in TARGET_SERIES}

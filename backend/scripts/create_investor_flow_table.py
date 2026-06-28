@@ -1,12 +1,10 @@
 """
-scripts/create_yield_macro_tables.py
+scripts/create_investor_flow_table.py
 
-yield/macro 테이블 최초 1회 생성.
-  - macro_observation
-  - yield_observation
-  - yield_intraday_snapshot
+수급 테이블 최초 1회 생성.
+  - investor_flow_daily
 
-실행: python -m scripts.create_yield_macro_tables
+실행: python -m scripts.create_investor_flow_table
 checkfirst=True 멱등.
 """
 import sys
@@ -16,19 +14,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.db.base import Base
 from app.db.session import engine
-from app.models.macro_indicator import MacroObservationModel
-from app.models.yield_rate import YieldObservationModel, YieldIntradaySnapshotModel
+from app.models.investor_flow import InvestorFlowDailyModel
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 
 def create_tables() -> None:
-    tables = [
-        MacroObservationModel.__table__,
-        YieldObservationModel.__table__,
-        YieldIntradaySnapshotModel.__table__,
-    ]
+    tables = [InvestorFlowDailyModel.__table__]
     Base.metadata.create_all(bind=engine, tables=tables, checkfirst=True)
     for t in tables:
         logger.info("Ensured table: %s", t.name)
