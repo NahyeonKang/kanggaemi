@@ -1,0 +1,1069 @@
+version: "0.1.0"
+updated_at: "2026-06-28"
+
+# 에이전트 분석의 가설 시드(hypothesis seed).
+# - data_spec_id: data_specs.yaml의 DataSpec 참조. 미수집 데이터는 null + status:draft.
+# - status: active(현재 계산 가능) | draft(데이터/구현 미비) | deprecated.
+# - transform: 원자료 → 팩터 신호 변환 규칙.
+# - 한 팩터가 여러 asset_class에 적용될 수 있음. data_spec_id는 대표 소스 1개를 적고,
+#   변형/대체 소스는 caveats에 명시.
+
+factors:
+
+  # =====================================================================
+  # MACRO
+  # =====================================================================
+  - factor_id: MACRO_FX_USDKRW
+    factor_name: USD/KRW 환율
+    dimension: macro
+    asset_classes: [kr_index, kr_equity]
+    data_spec_id: DS_FX_USDKRW_DAILY
+    frequency: daily
+    unit: KRW
+    cumulative_type: point_in_time
+    transform:
+      method: z_score
+      window: 252D
+    interpretation:
+      positive: 원화 약세(환율 상승)는 수출주에 우호적이나 외국인 자금 유출 압력으로도 작용.
+      negative: 원화 강세(환율 하락)는 외국인 수급에 우호적.
+      neutral: 박스권이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 환율 상승의 방향성 해석은 수출 모멘텀과 외국인 수급 중 무엇을 보느냐에 따라 상반될 수 있음.
+    status: active
+
+  - factor_id: MACRO_DOLLAR_INDEX
+    factor_name: 달러인덱스
+    dimension: macro
+    asset_classes: [kr_index, us_index]
+    data_spec_id: DS_MACRO_US_CORE
+    frequency: daily
+    unit: index
+    cumulative_type: point_in_time
+    transform:
+      method: z_score
+      window: 252D
+    interpretation:
+      positive: 달러 강세는 신흥국·위험자산에 부담.
+      negative: 달러 약세는 위험자산 선호에 우호적.
+      neutral: 변동성 낮으면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - DS_MACRO_US_CORE의 series_id=DTWEXBGS 사용(광의 달러지수). DXY와 구성 다름.
+    status: active
+
+  - factor_id: RATE_KR_GOV_3Y
+    factor_name: 국고채 3년
+    dimension: macro
+    asset_classes: [kr_index]
+    data_spec_id: DS_RATE_KR_TREASURY
+    frequency: daily
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: level_and_delta
+      window: 20D
+    interpretation:
+      positive: 단기금리 상승은 유동성·밸류에이션에 부담.
+      negative: 단기금리 하락은 위험자산에 우호적.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - tenor=3Y 선택. 단위 percent.
+    status: active
+
+  - factor_id: RATE_KR_GOV_10Y
+    factor_name: 국고채 10년
+    dimension: macro
+    asset_classes: [kr_index]
+    data_spec_id: DS_RATE_KR_TREASURY
+    frequency: daily
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: level_and_delta
+      window: 20D
+    interpretation:
+      positive: 장기금리 상승은 성장주 밸류에이션에 부담.
+      negative: 장기금리 하락은 성장주에 우호적.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - tenor=10Y.
+    status: active
+
+  - factor_id: RATE_KR_GOV_30Y
+    factor_name: 국고채 30년
+    dimension: macro
+    asset_classes: [kr_index]
+    data_spec_id: DS_RATE_KR_TREASURY
+    frequency: daily
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: level_and_delta
+      window: 20D
+    interpretation:
+      positive: 초장기금리 상승은 장기 할인율 상승 신호.
+      negative: 초장기금리 하락은 장기 할인율 완화.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - tenor=30Y.
+    status: active
+
+  - factor_id: RATE_US_2Y
+    factor_name: 미국채 2년
+    dimension: macro
+    asset_classes: [kr_index, us_index]
+    data_spec_id: DS_RATE_US_TREASURY
+    frequency: daily
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: level_and_delta
+      window: 20D
+    interpretation:
+      positive: 미 단기금리 상승은 긴축 기대로 위험자산에 부담.
+      negative: 미 단기금리 하락은 완화 기대.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - tenor=2Y. 통화정책 기대 민감.
+    status: active
+
+  - factor_id: RATE_US_10Y
+    factor_name: 미국채 10년
+    dimension: macro
+    asset_classes: [kr_index, us_index]
+    data_spec_id: DS_RATE_US_TREASURY
+    frequency: daily
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: level_and_delta
+      window: 20D
+    interpretation:
+      positive: 미 장기금리 상승은 글로벌 할인율 상승, 성장주 부담.
+      negative: 미 장기금리 하락은 성장주·위험자산 우호.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - tenor=10Y. 글로벌 벤치마크.
+    status: active
+
+  - factor_id: RATE_US_30Y
+    factor_name: 미국채 30년
+    dimension: macro
+    asset_classes: [us_index]
+    data_spec_id: DS_RATE_US_TREASURY
+    frequency: daily
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: level_and_delta
+      window: 20D
+    interpretation:
+      positive: 초장기금리 상승은 기간 프리미엄 확대.
+      negative: 초장기금리 하락은 완화.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - tenor=30Y.
+    status: active
+
+  - factor_id: RATE_US_5Y
+    factor_name: 미국채 5년
+    dimension: macro
+    asset_classes: [us_index]
+    data_spec_id: null
+    frequency: daily
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: level_and_delta
+      window: 20D
+    interpretation:
+      positive: 중기금리 상승은 긴축 신호.
+      negative: 중기금리 하락은 완화 신호.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — DS_RATE_US_TREASURY tenor에 5Y(DGS5) 추가 필요.
+    status: draft
+
+  - factor_id: RATE_SOFR
+    factor_name: SOFR
+    dimension: macro
+    asset_classes: [us_index]
+    data_spec_id: DS_RATE_US_TREASURY
+    frequency: daily
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: level_and_delta
+      window: 20D
+    interpretation:
+      positive: SOFR 상승은 단기 자금시장 긴축.
+      negative: SOFR 하락은 완화.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - DS_RATE_US_TREASURY의 tenor=SOFR(FRED SOFR) 사용.
+    status: active
+
+  - factor_id: RATE_FED_FUNDS
+    factor_name: Effective Fed Funds Rate
+    dimension: macro
+    asset_classes: [us_index]
+    data_spec_id: null
+    frequency: daily
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: level_and_delta
+      window: 20D
+    interpretation:
+      positive: 정책금리 상승은 긴축.
+      negative: 정책금리 하락은 완화.
+      neutral: 동결이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — FRED DFF/EFFR 시리즈 추가 필요.
+    status: draft
+
+  - factor_id: RATE_KR_US_SPREAD
+    factor_name: 한미 금리 스프레드
+    dimension: macro
+    asset_classes: [kr_index]
+    data_spec_id: DS_RATE_KR_TREASURY
+    frequency: daily
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: spread
+      window: null
+    interpretation:
+      positive: 한미 금리차 역전 심화(미국 우위)는 원화 약세·외국인 유출 압력.
+      negative: 금리차 정상화는 원화·수급에 우호적.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 파생 팩터 — DS_RATE_KR_TREASURY(10Y)와 DS_RATE_US_TREASURY(10Y)의 차이로 계산. 단일 data_spec로 표현 불가하여 KR을 대표로 표기.
+    status: active
+
+  - factor_id: RATE_US_REAL_10Y
+    factor_name: 미국채 10년 실질금리
+    dimension: macro
+    asset_classes: [kr_index, us_index]
+    data_spec_id: DS_MACRO_US_CORE
+    frequency: daily
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: level_and_delta
+      window: 20D
+    interpretation:
+      positive: 실질금리 상승은 무위험 실질수익률 상승, 성장주·금에 부담.
+      negative: 실질금리 하락은 위험자산·금에 우호.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - DS_MACRO_US_CORE series_id=DFII10(10년 TIPS).
+    status: active
+
+  - factor_id: RATE_US_BEI_10Y
+    factor_name: 미국채 10년 BEI
+    dimension: macro
+    asset_classes: [kr_index, us_index]
+    data_spec_id: DS_MACRO_US_CORE
+    frequency: daily
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: level_and_delta
+      window: 20D
+    interpretation:
+      positive: 기대인플레이션 상승은 리플레이션 신호.
+      negative: 기대인플레이션 하락은 디스인플레이션/수요둔화 신호.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - DS_MACRO_US_CORE series_id=T10YIE.
+    status: active
+
+  - factor_id: VOL_VIX
+    factor_name: VIX
+    dimension: macro
+    asset_classes: [kr_index, us_index]
+    data_spec_id: DS_MACRO_US_CORE
+    frequency: daily
+    unit: pt
+    cumulative_type: point_in_time
+    transform:
+      method: z_score
+      window: 252D
+    interpretation:
+      positive: VIX 급등은 위험회피 심화(위험자산에 부정적).
+      negative: VIX 하락은 위험선호 회복.
+      neutral: 평이한 수준이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - DS_MACRO_US_CORE series_id=VIXCLS. 미국 변동성지수(국내는 VKOSPI 별도 필요).
+    status: active
+
+  - factor_id: VOL_VKOSPI
+    factor_name: VKOSPI
+    dimension: macro
+    asset_classes: [kr_index]
+    data_spec_id: null
+    frequency: daily
+    unit: pt
+    cumulative_type: point_in_time
+    transform:
+      method: z_score
+      window: 252D
+    interpretation:
+      positive: VKOSPI 급등은 국내 위험회피 심화.
+      negative: VKOSPI 하락은 위험선호 회복.
+      neutral: 평이하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — VKOSPI 소스 필요(KRX/KIS 변동성지수).
+    status: draft
+
+  - factor_id: CMDT_WTI
+    factor_name: 유가 WTI
+    dimension: macro
+    asset_classes: [kr_index, us_index]
+    data_spec_id: null
+    frequency: daily
+    unit: USD
+    cumulative_type: point_in_time
+    transform:
+      method: pct_change
+      window: 20D
+    interpretation:
+      positive: 유가 상승은 정유·에너지에 우호, 인플레 압력.
+      negative: 유가 하락은 비용 완화이나 수요둔화 우려.
+      neutral: 박스권이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — 원자재 소스 필요(FRED DCOILWTICO 등).
+    status: draft
+
+  - factor_id: CMDT_BRENT
+    factor_name: 유가 Brent
+    dimension: macro
+    asset_classes: [kr_index, us_index]
+    data_spec_id: null
+    frequency: daily
+    unit: USD
+    cumulative_type: point_in_time
+    transform:
+      method: pct_change
+      window: 20D
+    interpretation:
+      positive: 브렌트 상승은 에너지·인플레 압력.
+      negative: 브렌트 하락은 비용 완화/수요둔화.
+      neutral: 박스권이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — FRED DCOILBRENTEU 등 필요.
+    status: draft
+
+  - factor_id: CMDT_GOLD
+    factor_name: 금 가격
+    dimension: macro
+    asset_classes: [us_index]
+    data_spec_id: null
+    frequency: daily
+    unit: USD
+    cumulative_type: point_in_time
+    transform:
+      method: pct_change
+      window: 20D
+    interpretation:
+      positive: 금 상승은 실질금리 하락/위험회피 신호.
+      negative: 금 하락은 실질금리 상승/위험선호.
+      neutral: 박스권이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — 금 시세 소스 필요.
+    status: draft
+
+  - factor_id: CMDT_BASKET
+    factor_name: 주요 원자재 가격
+    dimension: macro
+    asset_classes: [kr_index, us_index]
+    data_spec_id: null
+    frequency: daily
+    unit: index
+    cumulative_type: point_in_time
+    transform:
+      method: pct_change
+      window: 20D
+    interpretation:
+      positive: 원자재 광범위 상승은 리플레이션/비용 압력.
+      negative: 원자재 하락은 디스인플레이션/수요둔화.
+      neutral: 혼조면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — 원자재 종합지수(예 GSCI/BCOM) 소스 필요. 구성 정의 필요.
+    status: draft
+
+  - factor_id: LIQ_DEPOSIT
+    factor_name: 고객예탁금
+    dimension: macro
+    asset_classes: [kr_index]
+    data_spec_id: null
+    frequency: daily
+    unit: KRW
+    cumulative_type: point_in_time
+    transform:
+      method: z_score
+      window: 252D
+    interpretation:
+      positive: 예탁금 증가는 대기 매수여력 확대.
+      negative: 예탁금 감소는 매수여력 축소.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — 금융투자협회/KRX 예탁금 소스 필요.
+    status: draft
+
+  - factor_id: LIQ_CREDIT
+    factor_name: 신용융자잔고
+    dimension: macro
+    asset_classes: [kr_index]
+    data_spec_id: null
+    frequency: daily
+    unit: KRW
+    cumulative_type: point_in_time
+    transform:
+      method: z_score
+      window: 252D
+    interpretation:
+      positive: 신용잔고 증가는 위험선호이나 과열 시 변동성 확대 위험.
+      negative: 신용잔고 감소는 디레버리징.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — 신용융자잔고 소스 필요. 과열 구간 해석 주의.
+    status: draft
+
+  # =====================================================================
+  # FLOW
+  # =====================================================================
+  - factor_id: FLOW_FOREIGN_SPOT
+    factor_name: 외국인 순매수(현물)
+    dimension: flow
+    asset_classes: [kr_equity, kr_index]
+    data_spec_id: DS_KR_MARKET_INVESTOR_FLOW
+    frequency: daily
+    unit: KRW
+    cumulative_type: daily
+    transform:
+      method: rolling_sum
+      window: 5D
+    interpretation:
+      positive: 외국인 순매수 확대는 단기 수급 개선 신호.
+      negative: 외국인 순매도 확대는 단기 수급 부담.
+      neutral: 방향성이 약하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - investor_type=frgn. 시장은 DS_KR_MARKET_INVESTOR_FLOW, 종목은 DS_KR_EQUITY_INVESTOR_FLOW.
+      - 당일분 가집계(잠정→확정). net_amount 단위 백만원(종목 기준), 시장 단위 재확인 필요.
+      - 대형주 바스켓 매매와 개별 종목 수급을 구분해야 함.
+    status: active
+
+  - factor_id: FLOW_INSTITUTION_SPOT
+    factor_name: 기관 순매수(현물)
+    dimension: flow
+    asset_classes: [kr_equity, kr_index]
+    data_spec_id: DS_KR_MARKET_INVESTOR_FLOW
+    frequency: daily
+    unit: KRW
+    cumulative_type: daily
+    transform:
+      method: rolling_sum
+      window: 5D
+    interpretation:
+      positive: 기관 순매수 확대는 수급 개선.
+      negative: 기관 순매도 확대는 수급 부담.
+      neutral: 방향성 약하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - investor_type=orgn(또는 세부 ivtr/pe_fund/bank/insu/fund 합산). 당일분 가집계.
+    status: active
+
+  - factor_id: FLOW_INDIVIDUAL_SPOT
+    factor_name: 개인 순매수(현물)
+    dimension: flow
+    asset_classes: [kr_equity, kr_index]
+    data_spec_id: DS_KR_MARKET_INVESTOR_FLOW
+    frequency: daily
+    unit: KRW
+    cumulative_type: daily
+    transform:
+      method: rolling_sum
+      window: 5D
+    interpretation:
+      positive: 개인 순매수는 외국인/기관과 반대 포지션일 때 역지표로 볼 수 있음.
+      negative: 개인 순매도는 외국인/기관 매수와 짝지어 해석.
+      neutral: 방향성 약하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - investor_type=prsn. 개인은 역지표 성격으로 해석 주의.
+    status: active
+
+  - factor_id: FLOW_FUTURES_INVESTOR
+    factor_name: 선물 외국인·기관·개인 순매수
+    dimension: flow
+    asset_classes: [kr_index]
+    data_spec_id: null
+    frequency: daily
+    unit: contracts
+    cumulative_type: daily
+    transform:
+      method: rolling_sum
+      window: 5D
+    interpretation:
+      positive: 선물 외국인 순매수 확대는 지수 상방 베팅.
+      negative: 선물 외국인 순매도 확대는 헤지/하방 베팅.
+      neutral: 방향성 약하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — 현 투자자 수급 API는 현물(시장/종목)만. 선물 투자자별 수급 소스 필요.
+    status: draft
+
+  - factor_id: PROGRAM_NET
+    factor_name: 프로그램매매 순매수
+    dimension: flow
+    asset_classes: [kr_equity, kr_index]
+    data_spec_id: DS_KR_MARKET_PROGRAM_TRADING
+    frequency: daily
+    unit: KRW
+    cumulative_type: daily
+    transform:
+      method: rolling_sum
+      window: 5D
+    interpretation:
+      positive: 프로그램 순매수(특히 비차익) 확대는 단기 수급 동력.
+      negative: 프로그램 순매도 확대는 수급 부담.
+      neutral: 방향성 약하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - trade_class=whol/account_type=smtn의 net 사용. 차익/비차익 분해는 arbt/nabt.
+      - 거래대금 단위 원. 당일분 잠정 가능. 시장=DS_KR_MARKET_PROGRAM_TRADING, 종목=DS_KR_EQUITY_PROGRAM_TRADING.
+    status: active
+
+  - factor_id: FUTURES_OI
+    factor_name: 선물 미결제약정 OI
+    dimension: flow
+    asset_classes: [kr_index]
+    data_spec_id: DS_KR_INDEX_FUTURES_BASIS
+    frequency: daily
+    unit: contracts
+    cumulative_type: point_in_time
+    transform:
+      method: level_and_delta
+      window: 5D
+    interpretation:
+      positive: OI 증가 + 가격 상승은 신규 매수 유입(추세 강화).
+      negative: OI 증가 + 가격 하락은 신규 매도 유입(하방 강화).
+      neutral: OI 감소는 포지션 청산(추세 약화).
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - open_interest 사용. 가격 방향과 결합해 해석(OI 단독은 방향성 모호).
+      - output1 스냅샷(observed_at) — as_of 조회.
+    status: active
+
+  - factor_id: FUTURES_BASIS
+    factor_name: 선물 베이시스
+    dimension: flow
+    asset_classes: [kr_index]
+    data_spec_id: DS_KR_INDEX_FUTURES_BASIS
+    frequency: daily
+    unit: pt
+    cumulative_type: point_in_time
+    transform:
+      method: level_and_delta
+      window: 20D
+    interpretation:
+      positive: 베이시스 확대(콘탱고 강화)는 현물 매수차익 유입 여건.
+      negative: 베이시스 축소/백워데이션은 차익 매도 압력.
+      neutral: 평이하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - basis 사용. 단위 pt. 차익거래 잔고/프로그램과 연계 해석.
+    status: active
+
+  - factor_id: FUTURES_BASIS_DISPARITY
+    factor_name: 이론 베이시스 대비 괴리
+    dimension: flow
+    asset_classes: [kr_index]
+    data_spec_id: DS_KR_INDEX_FUTURES_BASIS
+    frequency: daily
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: level
+      window: null
+    interpretation:
+      positive: 시장 베이시스가 이론 대비 고평가(괴리율 +)면 매수차익 유인.
+      negative: 저평가(괴리율 -)면 매도차익 유인.
+      neutral: 괴리 작으면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - disparity(괴리율) 및 theoretical_price 사용.
+    status: active
+
+  - factor_id: ARBITRAGE_BALANCE
+    factor_name: 차익거래 잔고
+    dimension: flow
+    asset_classes: [kr_index]
+    data_spec_id: DS_KR_MARKET_PROGRAM_TRADING
+    frequency: daily
+    unit: KRW
+    cumulative_type: cumulative
+    transform:
+      method: cumulative_sum
+      window: null
+    interpretation:
+      positive: 차익 매수잔고 누적 증가는 향후 청산 시 매도압력 잠재.
+      negative: 차익잔고 청산은 현물 매도.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 현재 데이터는 '잔고'가 아니라 일별 차익(arbt) 매매대금 → 누적 근사. 실제 잔고는 별도 소스 필요.
+    status: draft
+
+  - factor_id: NONARBITRAGE_BALANCE
+    factor_name: 비차익거래 잔고
+    dimension: flow
+    asset_classes: [kr_index]
+    data_spec_id: DS_KR_MARKET_PROGRAM_TRADING
+    frequency: daily
+    unit: KRW
+    cumulative_type: cumulative
+    transform:
+      method: cumulative_sum
+      window: null
+    interpretation:
+      positive: 비차익 매수 우위는 방향성 수급 동력.
+      negative: 비차익 매도 우위는 수급 부담.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 일별 비차익(nabt) 매매대금의 누적 근사. 실제 잔고와 다를 수 있음.
+    status: draft
+
+  - factor_id: SHORT_BALANCE
+    factor_name: 공매도 잔고
+    dimension: flow
+    asset_classes: [kr_equity, kr_index]
+    data_spec_id: null
+    frequency: daily
+    unit: shares
+    cumulative_type: point_in_time
+    transform:
+      method: z_score
+      window: 252D
+    interpretation:
+      positive: 공매도 잔고 급증은 하락 베팅 누적(숏커버 반등 잠재력도).
+      negative: 공매도 잔고 감소는 숏커버/심리 개선.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — KRX 공매도 잔고 소스 필요.
+    status: draft
+
+  - factor_id: SHORT_VALUE
+    factor_name: 공매도 거래대금
+    dimension: flow
+    asset_classes: [kr_equity, kr_index]
+    data_spec_id: null
+    frequency: daily
+    unit: KRW
+    cumulative_type: daily
+    transform:
+      method: rolling_sum
+      window: 5D
+    interpretation:
+      positive: 공매도 거래대금 비중 급증은 하락 압력.
+      negative: 공매도 비중 감소는 압력 완화.
+      neutral: 평이하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — KRX 공매도 거래대금 소스 필요. 전체 거래대금 대비 비중으로 정규화 권장.
+    status: draft
+
+  # =====================================================================
+  # INDUSTRY
+  # =====================================================================
+  - factor_id: SECTOR_INDEX_KR
+    factor_name: 업종/섹터지수 (국내)
+    dimension: industry
+    asset_classes: [kr_equity, kr_index]
+    data_spec_id: DS_KR_INDEX_DAILY_PRICE
+    frequency: daily
+    unit: pt
+    cumulative_type: point_in_time
+    transform:
+      method: z_score
+      window: 60D
+    interpretation:
+      positive: 해당 업종지수 강세는 섹터 모멘텀 우위.
+      negative: 업종지수 약세는 섹터 모멘텀 열위.
+      neutral: 횡보면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - entity_code=업종코드. 종목 분석 시 소속 업종 매핑 필요.
+    status: active
+
+  - factor_id: SECTOR_RETURN_KR
+    factor_name: 업종별 수익률 (국내)
+    dimension: industry
+    asset_classes: [kr_equity, kr_index]
+    data_spec_id: DS_KR_INDEX_DAILY_PRICE
+    frequency: daily
+    unit: percent
+    cumulative_type: daily
+    transform:
+      method: pct_change
+      window: 20D
+    interpretation:
+      positive: 업종 수익률 상위는 상대강도(RS) 우위.
+      negative: 하위 업종은 상대약세.
+      neutral: 시장 평균 수준이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - DS_KR_INDEX_DAILY_PRICE close의 변화율. 업종 간 상대비교(cross-sectional rank) 권장.
+    status: active
+
+  - factor_id: SECTOR_FOREIGN_NETBUY
+    factor_name: 업종별 외국인 순매수
+    dimension: industry
+    asset_classes: [kr_equity, kr_index]
+    data_spec_id: DS_KR_MARKET_INVESTOR_FLOW
+    frequency: daily
+    unit: KRW
+    cumulative_type: daily
+    transform:
+      method: rolling_sum
+      window: 5D
+    interpretation:
+      positive: 특정 업종 외국인 순매수 집중은 섹터 로테이션 유입.
+      negative: 업종 외국인 순매도는 섹터 이탈.
+      neutral: 방향성 약하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - DS_KR_MARKET_INVESTOR_FLOW의 sector_code(업종)로 조회. 0001=전체.
+      - investor_type=frgn. 당일분 가집계.
+    status: active
+
+  - factor_id: SECTOR_FLOW
+    factor_name: 업종별 수급(종합)
+    dimension: industry
+    asset_classes: [kr_equity, kr_index]
+    data_spec_id: DS_KR_MARKET_INVESTOR_FLOW
+    frequency: daily
+    unit: KRW
+    cumulative_type: daily
+    transform:
+      method: rolling_sum
+      window: 5D
+    interpretation:
+      positive: 업종에 외국인·기관 동반 순매수면 강한 섹터 수급.
+      negative: 동반 순매도면 섹터 수급 이탈.
+      neutral: 혼조면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - sector_code별 frgn+orgn 합산. 개인은 역지표로 분리 해석.
+    status: active
+
+  - factor_id: SOX_INDEX
+    factor_name: SOX 지수(필라델피아 반도체)
+    dimension: industry
+    asset_classes: [kr_equity, us_equity]
+    data_spec_id: DS_MACRO_US_CORE
+    frequency: daily
+    unit: pt
+    cumulative_type: point_in_time
+    transform:
+      method: pct_change
+      window: 5D
+    interpretation:
+      positive: SOX 강세는 국내 반도체(대형주) 모멘텀에 선행적 우호.
+      negative: SOX 약세는 반도체 섹터 부담.
+      neutral: 횡보면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - DS_MACRO_US_CORE series_id=NASDAQSOX. 국내 반도체 대형주와 상관 높음.
+    status: active
+
+  - factor_id: SECTOR_INDEX_US
+    factor_name: 섹터지수 (미국)
+    dimension: industry
+    asset_classes: [us_equity]
+    data_spec_id: null
+    frequency: daily
+    unit: pt
+    cumulative_type: point_in_time
+    transform:
+      method: pct_change
+      window: 20D
+    interpretation:
+      positive: 미국 섹터지수 강세는 해당 섹터 글로벌 모멘텀.
+      negative: 약세는 섹터 부담.
+      neutral: 횡보면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — 미국 섹터 ETF/지수(GICS 섹터) 소스 필요.
+    status: draft
+
+  # =====================================================================
+  # VALUATION
+  # =====================================================================
+  - factor_id: VAL_PER_KR_EQ
+    factor_name: PER (국내주식)
+    dimension: valuation
+    asset_classes: [kr_equity]
+    data_spec_id: DS_KR_EQUITY_VALUATION
+    frequency: daily
+    unit: ratio
+    cumulative_type: point_in_time
+    transform:
+      method: z_score
+      window: 252D
+    interpretation:
+      positive: PER가 역사적 밴드 하단이면 저평가 매력.
+      negative: PER가 밴드 상단이면 고평가 부담.
+      neutral: 밴드 중앙이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - DS_KR_EQUITY_VALUATION의 per(스냅샷). 후행 EPS 기반(선행 PER 아님).
+      - 적자 종목은 PER 의미 없음(null/음수 처리).
+    status: active
+
+  - factor_id: VAL_PBR_KR_EQ
+    factor_name: PBR (국내주식)
+    dimension: valuation
+    asset_classes: [kr_equity]
+    data_spec_id: DS_KR_EQUITY_VALUATION
+    frequency: daily
+    unit: ratio
+    cumulative_type: point_in_time
+    transform:
+      method: z_score
+      window: 252D
+    interpretation:
+      positive: PBR 밴드 하단은 저평가(자산가치 대비).
+      negative: PBR 밴드 상단은 고평가.
+      neutral: 중앙이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - DS_KR_EQUITY_VALUATION의 pbr. ROE와 결합(PBR-ROE) 해석 권장.
+    status: active
+
+  - factor_id: VAL_EPS_KR_EQ
+    factor_name: EPS (국내주식)
+    dimension: valuation
+    asset_classes: [kr_equity]
+    data_spec_id: DS_KR_EQUITY_VALUATION
+    frequency: daily
+    unit: KRW
+    cumulative_type: point_in_time
+    transform:
+      method: level
+      window: null
+    interpretation:
+      positive: EPS 상향은 이익 체력 개선.
+      negative: EPS 하향은 이익 둔화.
+      neutral: 변화 미미하면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - DS_KR_EQUITY_VALUATION의 eps(후행). 컨센서스(선행 EPS) 아님.
+    status: active
+
+  - factor_id: VAL_EPS_GROWTH
+    factor_name: EPS 성장률
+    dimension: valuation
+    asset_classes: [kr_equity, us_equity]
+    data_spec_id: null
+    frequency: quarterly
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: yoy_growth
+      window: null
+    interpretation:
+      positive: EPS 성장률 가속은 이익 모멘텀.
+      negative: EPS 성장률 둔화/역성장은 부담.
+      neutral: 횡보면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — 분기 EPS 시계열(재무) 필요. 스냅샷 eps 누적으로 근사 가능하나 정합성 낮음.
+    status: draft
+
+  - factor_id: VAL_PER_GLOBAL
+    factor_name: PER (미국/지수)
+    dimension: valuation
+    asset_classes: [us_equity, kr_index, us_index]
+    data_spec_id: null
+    frequency: daily
+    unit: ratio
+    cumulative_type: point_in_time
+    transform:
+      method: z_score
+      window: 252D
+    interpretation:
+      positive: PER 밴드 하단은 저평가.
+      negative: 밴드 상단은 고평가.
+      neutral: 중앙이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — 미국 개별주/지수 밸류에이션 소스 필요(국내주식 PER은 VAL_PER_KR_EQ).
+    status: draft
+
+  - factor_id: VAL_PBR_GLOBAL
+    factor_name: PBR (미국/지수)
+    dimension: valuation
+    asset_classes: [us_equity, kr_index, us_index]
+    data_spec_id: null
+    frequency: daily
+    unit: ratio
+    cumulative_type: point_in_time
+    transform:
+      method: z_score
+      window: 252D
+    interpretation:
+      positive: PBR 밴드 하단은 저평가.
+      negative: 밴드 상단은 고평가.
+      neutral: 중앙이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — 미국/지수 PBR 소스 필요.
+    status: draft
+
+  - factor_id: VAL_EV_EBITDA
+    factor_name: EV/EBITDA
+    dimension: valuation
+    asset_classes: [kr_equity, us_equity]
+    data_spec_id: null
+    frequency: quarterly
+    unit: ratio
+    cumulative_type: point_in_time
+    transform:
+      method: z_score
+      window: 252D
+    interpretation:
+      positive: EV/EBITDA 하단은 현금흐름 대비 저평가.
+      negative: 상단은 고평가.
+      neutral: 중앙이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — EV(시총+순부채)·EBITDA 재무 소스 필요. KIS 스냅샷엔 없음.
+    status: draft
+
+  - factor_id: VAL_ROE
+    factor_name: ROE
+    dimension: valuation
+    asset_classes: [kr_equity, us_equity, kr_index, us_index]
+    data_spec_id: null
+    frequency: quarterly
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: level
+      window: null
+    interpretation:
+      positive: 고ROE는 자본효율 우수(PBR 프리미엄 정당화).
+      negative: 저ROE/하락은 수익성 부담.
+      neutral: 업종 평균 수준이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — 재무(순이익/자기자본) 소스 필요.
+    status: draft
+
+  - factor_id: VAL_OP_MARGIN
+    factor_name: 영업이익률
+    dimension: valuation
+    asset_classes: [kr_equity, us_equity]
+    data_spec_id: null
+    frequency: quarterly
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: level
+      window: null
+    interpretation:
+      positive: 영업이익률 개선은 수익성 강화.
+      negative: 마진 훼손은 비용압력/경쟁심화.
+      neutral: 안정적이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — 손익계산서(영업이익/매출) 소스 필요.
+    status: draft
+
+  - factor_id: VAL_NET_MARGIN
+    factor_name: 순이익률
+    dimension: valuation
+    asset_classes: [kr_equity, us_equity]
+    data_spec_id: null
+    frequency: quarterly
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: level
+      window: null
+    interpretation:
+      positive: 순이익률 개선은 최종 수익성 강화.
+      negative: 순이익률 훼손은 부담.
+      neutral: 안정적이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — 손익계산서(순이익/매출) 소스 필요.
+    status: draft
+
+  - factor_id: VAL_REVENUE_GROWTH
+    factor_name: 매출성장률
+    dimension: valuation
+    asset_classes: [kr_equity, us_equity]
+    data_spec_id: null
+    frequency: quarterly
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: yoy_growth
+      window: null
+    interpretation:
+      positive: 매출 성장 가속은 top-line 모멘텀.
+      negative: 매출 둔화/역성장은 부담.
+      neutral: 횡보면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — 분기 매출 시계열 필요.
+    status: draft
+
+  - factor_id: VAL_OP_GROWTH
+    factor_name: 영업이익성장률
+    dimension: valuation
+    asset_classes: [kr_equity, us_equity]
+    data_spec_id: null
+    frequency: quarterly
+    unit: percent
+    cumulative_type: point_in_time
+    transform:
+      method: yoy_growth
+      window: null
+    interpretation:
+      positive: 영업이익 성장 가속은 이익 모멘텀(레버리지 효과).
+      negative: 영업이익 둔화는 부담.
+      neutral: 횡보면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 미수집 — 분기 영업이익 시계열 필요.
+    status: draft

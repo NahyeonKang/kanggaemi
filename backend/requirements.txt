@@ -13,3 +13,4 @@ pandas
 sqlalchemy
 holidays
 psycopg2-binary
+PyYAML

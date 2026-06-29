@@ -1,0 +1,81 @@
+version: "0.1.0"
+updated_at: "2026-06-28"
+
+# ── asset instance cache (검증된 해석 결과 REGISTRY) ────────────────────
+# 열린 집합. 미리 전부 채우지 않는다.
+# 질의에 새 자산이 등장하면 resolution 절차로 검증 후 1행 append → 이후 캐시 히트.
+#
+# resolution 흐름:
+#   1) LLM이 질의에서 asset_name → (asset_class 후보, entity_code 후보, sector) 추출
+#   2) entity_code를 종목/지수/선물옵션 마스터로 grounding(환각 방지)
+#   3) 검증되면 아래 스키마로 append (resolved_by/verified_at 기록)
+#   4) dimension·data_spec은 여기 적지 않는다 → asset_class_taxonomy에서 끌어옴
+#
+# 필드:
+#   asset_code  : entity_code. 반드시 문자열(따옴표) — 선행 0 보존.
+#   asset_class : asset_class_taxonomy.yaml의 classes[].asset_class 참조.
+#   aliases     : 질의 매칭용 별칭(한글명/영문명/약칭).
+#   resolved_by : 검증 출처 (예: kis_master, llm+master, manual).
+#   verified_at : 마지막 검증일. 선물/옵션은 만기마다 재검증.
+#   expires_at  : (선택) 만료성 코드(선물/옵션)만. 만료 후 캐시 무효.
+
+assets:
+  - asset_code: "0001"
+    asset_name: 코스피
+    asset_class: kr_index
+    region: kr
+    market: KOSPI
+    sector: null
+    aliases: [KOSPI, 코스피, 종합주가지수, 코스피지수]
+    resolved_by: manual
+    verified_at: "2026-06-28"
+    expires_at: null
+    status: active
+
+  - asset_code: "11001"
+    asset_name: 코스닥
+    asset_class: kr_index
+    region: kr
+    market: KOSDAQ
+    sector: null
+    aliases: [KOSDAQ, 코스닥, 코스닥지수]
+    resolved_by: manual
+    verified_at: "2026-06-28"
+    expires_at: null
+    status: active
+
+  - asset_code: "005930"
+    asset_name: 삼성전자
+    asset_class: kr_equity
+    region: kr
+    market: KOSPI
+    sector: 반도체
+    aliases: [삼성전자, Samsung Electronics, 삼전]
+    resolved_by: manual
+    verified_at: "2026-06-28"
+    expires_at: null
+    status: active
+
+  - asset_code: "000660"
+    asset_name: SK하이닉스
+    asset_class: kr_equity
+    region: kr
+    market: KOSPI
+    sector: 반도체
+    aliases: [SK하이닉스, SK Hynix, 하이닉스]
+    resolved_by: manual
+    verified_at: "2026-06-28"
+    expires_at: null
+    status: active
+
+  - asset_code: "USDKRW"
+    asset_name: 원/달러 환율
+    asset_class: fx
+    region: kr
+    market: KB
+    sector: null
+    aliases: [USDKRW, 원달러, 달러원, 환율, USD/KRW]
+    resolved_by: manual
+    verified_at: "2026-06-28"
+    expires_at: null
+    status: active

@@ -1,0 +1,120 @@
+version: "0.1.0"
+updated_at: "2026-06-28"
+
+# ── asset_class taxonomy (STATIC CONFIG, 권위) ──────────────────────────
+# 닫힌 집합. LLM이 생성/변형하지 않음(controlled vocabulary).
+# factor_catalog.yaml / data_specs.yaml가 이 asset_class 값을 키로 참조한다.
+#
+# 역할 분리:
+#   - 이 파일       : asset_class별 "정책"(적용 dimension, 기본 data_spec, 코드 포맷).
+#   - asset_taxonomy: 질의에 등장한 "개별 인스턴스"(티커/업종코드…)를 검증해 캐시.
+#     인스턴스는 asset_class만 참조하고, dimension/data_spec은 여기서 끌어쓴다.
+#
+# data_coverage: full | partial | none  (현재 수집된 데이터 기준)
+
+classes:
+  - asset_class: kr_equity
+    description: 국내 상장 개별주식
+    region: kr
+    markets: [KOSPI, KOSDAQ]
+    entity_code_format: "6-digit 종목코드 (예: 005930)"
+    entity_code_source: KIS 종목정보 다운로드(국내) / 종목마스터
+    applicable_dimensions: [flow, industry, valuation]
+    default_data_specs:
+      flow: [DS_KR_EQUITY_DAILY_PRICE, DS_KR_EQUITY_INVESTOR_FLOW, DS_KR_EQUITY_PROGRAM_TRADING]
+      industry: [DS_KR_INDEX_DAILY_PRICE, DS_KR_MARKET_INVESTOR_FLOW, DS_MACRO_US_CORE]
+      valuation: [DS_KR_EQUITY_VALUATION]
+    data_coverage: partial
+    caveats:
+      - industry 적용 시 종목→업종코드 매핑 필요(인스턴스 캐시의 sector 활용).
+      - 펀더멘털(EV/EBITDA·ROE·마진·성장률) 미수집 → valuation은 PER/PBR/EPS만 active.
+      - macro는 직접 적용하지 않고 kr_index 시장 backdrop으로 참조.
+    status: active
+
+  - asset_class: us_equity
+    description: 미국 상장 개별주식
+    region: us
+    markets: [NYSE, NASDAQ]
+    entity_code_format: "ticker symbol (예: AAPL)"
+    entity_code_source: 미국 종목마스터(미수집)
+    applicable_dimensions: [industry, valuation]
+    default_data_specs:
+      industry: [DS_MACRO_US_CORE]
+      valuation: []
+    data_coverage: none
+    caveats:
+      - 가격/밸류에이션/섹터 데이터 대부분 미수집. 현재는 SOX(DS_MACRO_US_CORE)만 간접 활용.
+      - 사용 전 us_equity 수집 파이프라인 추가 필요.
+    status: active
+
+  - asset_class: kr_index
+    description: 국내 지수·업종 및 지수 파생(선물/옵션)
+    region: kr
+    markets: [KOSPI, KOSDAQ, KRX]
+    entity_code_format: "지수/업종 = 4-digit 업종코드(예: 0001); 선물/옵션 = KIS 선물옵션 종목코드(예: 101W09)"
+    entity_code_source: KIS 업종코드(FAQ 다운로드) / 선물옵션 종목마스터
+    applicable_dimensions: [macro, flow, valuation]
+    default_data_specs:
+      macro:
+        - DS_FX_USDKRW_DAILY
+        - DS_RATE_KR_TREASURY
+        - DS_RATE_US_TREASURY
+        - DS_MACRO_US_CORE
+      flow:
+        - DS_KR_INDEX_DAILY_PRICE
+        - DS_KR_INDEX_FUTURES
+        - DS_KR_INDEX_OPTIONS
+        - DS_KR_MARKET_INVESTOR_FLOW
+        - DS_KR_MARKET_PROGRAM_TRADING
+        - DS_KR_INDEX_FUTURES_BASIS
+      valuation: []
+    data_coverage: partial
+    caveats:
+      - 선물/옵션 entity_code는 만기마다 변경됨 → 캐시 재검증 필요(verified_at 갱신).
+      - 지수 자체 PER/PBR(밸류에이션) 미수집 → valuation default 비어 있음.
+      - VKOSPI·예탁금·신용융자·원자재 등 macro 일부 미수집(factor_catalog draft 참조).
+    status: active
+
+  - asset_class: us_index
+    description: 미국 지수 및 글로벌 매크로 컨텍스트
+    region: us
+    markets: [US]
+    entity_code_format: "index/series symbol (예: VIXCLS, NASDAQSOX)"
+    entity_code_source: FRED series_id 등
+    applicable_dimensions: [macro, valuation]
+    default_data_specs:
+      macro: [DS_RATE_US_TREASURY, DS_MACRO_US_CORE]
+      valuation: []
+    data_coverage: partial
+    caveats:
+      - 금리/달러/VIX/SOX/실질금리/BEI는 active. 유가·금·원자재·Fed Funds·5Y 미수집.
+      - 지수 밸류에이션(PER/PBR/ROE) 미수집.
+    status: active
+
+  - asset_class: fx
+    description: 외환(현재 USD/KRW)
+    region: kr
+    markets: [KB]
+    entity_code_format: "currency pair (예: USDKRW)"
+    entity_code_source: 고정 페어(스크래퍼 내장)
+    applicable_dimensions: [macro]
+    default_data_specs:
+      macro: [DS_FX_USDKRW_DAILY, DS_FX_USDKRW_INTRADAY]
+    data_coverage: full
+    caveats:
+      - 현재 USD/KRW만. 타 통화 확장 시 스크래퍼/스펙 추가 필요.
+    status: active
+
+  - asset_class: commodity
+    description: 원자재(유가/금/원자재지수 등)
+    region: global
+    markets: []
+    entity_code_format: "symbol (예: WTI, BRENT, GOLD)"
+    entity_code_source: 미수집(FRED/원자재 소스 예정)
+    applicable_dimensions: [macro]
+    default_data_specs:
+      macro: []
+    data_coverage: none
+    caveats:
+      - 전량 미수집. factor_catalog의 CMDT_* draft에 대응. 수집 파이프라인 추가 필요.
+    status: active

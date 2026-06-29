@@ -1,9 +1,13 @@
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-load_dotenv()
+ROOT_DIR = Path(__file__).resolve().parents[3]
+ENV_FILE = ROOT_DIR / ".env"
+
+load_dotenv(ENV_FILE)
 
 
 class Settings(BaseSettings):
@@ -35,7 +39,7 @@ class Settings(BaseSettings):
     ECOS_API_KEY: str = ""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(ENV_FILE),
         extra="ignore",
     )
 

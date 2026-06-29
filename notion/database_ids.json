@@ -1,0 +1,41 @@
+{
+  "asset_class_taxonomy": {
+    "database_id": "38ecf446c98a80be85f8f7d73dd82152"
+  },
+  "asset_taxonomy": {
+    "database_id": "38dcf446c98a80a18ce6c5f0a810f177"
+  },
+  "factor_catalog": {
+    "database_id": "38dcf446c98a808ebd04ce70dfdbf779"
+  },
+  "node_specs": {
+    "database_id": "38dcf446c98a80fda411d7ae28391a03"
+  },
+  "data_specs": {
+    "database_id": "38dcf446c98a80ec9135ccb4c7185c8b"
+  },
+  "prompt_templates": {
+    "database_id": "여기에_Prompt_Templates_DB_ID"
+  },
+  "output_schemas": {
+    "database_id": "여기에_Output_Schemas_DB_ID"
+  },
+  "report_runs": {
+    "database_id": "여기에_06_Report_Runs_DB_ID"
+  },
+  "evaluation_rubric": {
+    "database_id": "여기에_07_Evaluation_Rubric_DB_ID"
+  },
+  "error_improvement_log": {
+    "database_id": "여기에_08_Error_Improvement_Log_DB_ID"
+  },
+  "backlog": {
+    "database_id": "여기에_Backlog_DB_ID"
+  },
+  "adr": {
+    "database_id": "여기에_ADR_DB_ID"
+  },
+  "sample_reports": {
+    "database_id": "여기에_10_Sample_Reports_DB_ID"
+  }
+}

@@ -1,0 +1,1227 @@
+version: "0.1.0"
+updated_at: "2026-06-28"
+project: Investment Strategy Report Agent
+description: 노드별 역할, 입력, 출력, 실패 처리, 평가 기준을 정의한다.
+
+conventions:
+  node_id_format: lower_snake_case
+  status_options:
+    - active
+    - draft
+    - deprecated
+  node_type_options:
+    - classifier
+    - planner
+    - analyzer
+    - aggregator
+    - evaluator
+    - formatter
+  signal_options:
+    - positive
+    - neutral
+    - negative
+    - mixed
+    - unknown
+  confidence_range: "0.0 to 1.0"
+  supported_dimensions:
+    - macro
+    - flow
+    - industry
+    - valuation
+  supported_horizons:
+    - 1D
+    - 1W
+    - 1M
+    - 3M
+    - 6M
+    - 1Y
+    - Long-term
+
+global_input_contract:
+  user_query:
+    type: string
+    required: true
+    description: 사용자가 입력한 투자전망 또는 투자전략 질문
+  as_of_date:
+    type: date
+    required: true
+    description: 분석 기준일
+  locale:
+    type: string
+    required: false
+    default: ko-KR
+    description: 보고서 작성 언어 및 지역 설정
+
+global_output_contract:
+  run_id:
+    type: string
+    description: 에이전트 실행 고유 ID
+  asset_code:
+    type: string
+    description: Asset Taxonomy에서 정의한 자산 고유키
+  final_view:
+    type: string
+    allowed_values:
+      - positive
+      - neutral
+      - negative
+      - mixed
+      - unknown
+  confidence:
+    type: float
+    range: "0.0 to 1.0"
+  final_report:
+    type: string
+    description: 최종 투자전망 및 투자전략 보고서
+
+nodes:
+  - node_id: classify_node
+    node_name: Classify Node
+    status: active
+    node_type: classifier
+    stage: 1
+    owner_dimension: classification
+    description: 사용자 질의를 표준화된 자산, 자산군, 투자기간, 질문 의도로 분류한다.
+
+    depends_on: []
+    downstream_nodes:
+      - plan_node
+
+    input_schema:
+      required:
+        - user_query
+        - as_of_date
+      optional:
+        - locale
+        - user_profile
+      fields:
+        user_query:
+          type: string
+          description: 사용자 원문 질문
+        as_of_date:
+          type: date
+          description: 분석 기준일
+        locale:
+          type: string
+          default: ko-KR
+        user_profile:
+          type: object
+          description: 투자성향, 선호 투자기간 등 선택 입력
+
+    output_schema:
+      required:
+        - asset_code
+        - asset_name
+        - asset_class
+        - region
+        - market
+        - horizon
+        - query_intent
+        - applicable_dimensions
+      fields:
+        asset_code:
+          type: string
+          example: 005930
+        asset_name:
+          type: string
+          example: 삼성전자
+        asset_class:
+          type: string
+          example: kr_equity
+        region:
+          type: string
+          example: kr
+        market:
+          type: string
+          example: KOSPI
+        currency:
+          type: string
+          example: KRW
+        horizon:
+          type: string
+          example: 1Y
+        query_intent:
+          type: string
+          allowed_values:
+            - buy_or_not
+            - long_term_outlook
+            - short_term_timing
+            - risk_check
+            - portfolio_allocation
+            - comparison
+            - general_outlook
+        applicable_dimensions:
+          type: array
+          example:
+            - macro
+            - flow
+            - industry
+            - valuation
+        classification_confidence:
+          type: float
+          range: "0.0 to 1.0"
+        ambiguity:
+          type: object
+          description: 자산명 또는 투자기간이 모호한 경우 기록
+
+    references:
+      asset_taxonomy_yaml: configs/asset_taxonomy.yaml
+      factor_catalog_yaml: configs/factor_catalog.yaml
+
+    process_steps:
+      - 사용자 질문에서 자산군을 Asset Taxonomy에 맞게 작성한다.
+      - 투자기간을 명시/암시 표현에서 추출한다.
+      - 질문 의도를 buy_or_not, outlook, timing, risk 등으로 분류한다.
+      - 자산군에 맞는 applicable_dimensions를 반환한다.
+
+    failure_modes:
+      - code: ASSET_NOT_FOUND
+        description: Asset Taxonomy에 없는 자산
+        handling: asset_code를 UNKNOWN으로 두고 user_query에서 추정 후보를 기록한다.
+      - code: AMBIGUOUS_ASSET
+        description: 사용자가 지칭한 자산이 여러 개로 해석될 수 있음
+        handling: ambiguity.candidates에 후보를 기록하고 가장 가능성 높은 자산을 선택한다.
+      - code: HORIZON_MISSING
+        description: 투자기간이 명시되지 않음
+        handling: asset taxonomy의 default horizon 또는 query_intent 기준 기본값을 사용한다.
+
+    retry_policy:
+      max_retries: 1
+      retry_on:
+        - ASSET_NOT_FOUND
+        - AMBIGUOUS_ASSET
+
+    quality_checks:
+      - asset_code가 Asset Taxonomy에 존재해야 한다.
+      - asset_class가 비어 있으면 안 된다.
+      - horizon이 supported_horizons 중 하나여야 한다.
+      - applicable_dimensions가 최소 2개 이상이어야 한다.
+
+    prompt_guidelines:
+      - 사용자의 표현을 임의로 과도하게 해석하지 않는다.
+      - 자산명, 투자기간, 질문 의도는 분리해서 판단한다.
+      - 모호한 경우에도 가능한 후보와 confidence를 함께 기록한다.
+
+  - node_id: plan_node
+    node_name: Plan Orchestrator Node
+    status: active
+    node_type: planner
+    stage: 2
+    owner_dimension: planning
+    description: 분류 결과를 바탕으로 분석 차원과 factor를 선택하고 실행 계획을 만든다.
+
+    depends_on:
+      - classify_node
+    downstream_nodes:
+      - macro_node
+      - flow_node
+      - industry_node
+      - valuation_node
+
+    input_schema:
+      required:
+        - asset_code
+        - asset_class
+        - horizon
+        - query_intent
+        - applicable_dimensions
+      optional:
+        - user_constraints
+      fields:
+        asset_code:
+          type: string
+        asset_class:
+          type: string
+        horizon:
+          type: string
+        query_intent:
+          type: string
+        applicable_dimensions:
+          type: array
+        user_constraints:
+          type: object
+          description: 사용자가 제외하거나 강조한 분석 조건
+
+    output_schema:
+      required:
+        - execution_plan
+        - selected_dimensions
+        - selected_factors
+        - node_order
+      fields:
+        execution_plan:
+          type: object
+          description: 실행할 노드와 factor 목록
+        selected_dimensions:
+          type: array
+          example:
+            - macro
+            - flow
+            - industry
+            - valuation
+        selected_factors:
+          type: array
+          items:
+            type: object
+            fields:
+              factor_id: string
+              factor_name: string
+              dimension: string
+              data_spec_id: string
+        node_order:
+          type: array
+          example:
+            - macro_node
+            - flow_node
+            - industry_node
+            - valuation_node
+        skipped_dimensions:
+          type: array
+          description: 선택되지 않은 차원과 사유
+        planning_confidence:
+          type: float
+
+    references:
+      asset_taxonomy_yaml: configs/asset_taxonomy.yaml
+      factor_catalog_yaml: configs/factor_catalog.yaml
+      data_specs_yaml: configs/data_specs.yaml
+
+    process_steps:
+      - asset_class와 applicable_dimensions를 기준으로 factor 후보를 조회한다.
+      - 데이터가 없는 factor는 selected_factors에 포함하되 missing_data_risk를 표시한다.
+      - 실행할 노드 순서를 결정한다.
+
+    factor_selection_rules:
+      - asset_class가 KR Equity이면 macro, flow, industry, valuation를 우선 고려한다.
+      - asset_class가 KR Index이면 macro, flow, valuation를 우선 고려한다.
+      - asset_class가 FX이면 macro를 우선 고려한다.
+      - horizon이 1M 이하이면 flow의 가중치를 높인다.
+      - horizon이 1Y 이상이면 macro, industry, valuation의 가중치를 높인다.
+      - 사용자가 "지금 사도 될까"라고 물으면 valuation, flow을 포함한다.
+      - 사용자가 "장기 전망"을 물으면 macro, industry, valuation를 포함한다.
+
+    failure_modes:
+      - code: NO_FACTOR_FOUND
+        description: 자산군에 맞는 factor가 없음
+        handling: dimension별 fallback core factor를 사용한다.
+      - code: DATA_SPEC_MISSING
+        description: 선택된 factor에 data_spec_id가 없음
+        handling: factor는 유지하되 missing_data에 기록한다.
+
+    retry_policy:
+      max_retries: 1
+      retry_on:
+        - NO_FACTOR_FOUND
+        - NODE_MAPPING_FAILED
+
+    quality_checks:
+      - selected_factors가 비어 있으면 안 된다.
+      - 각 selected_dimension에 최소 1개 이상의 factor가 있어야 한다.
+
+    prompt_guidelines:
+      - factor 선택은 설명 가능해야 한다.
+      - 선택하지 않은 factor도 중요한 경우에는 skipped reason을 남긴다.
+      - 단기/장기 질문에서 factor 우선순위를 다르게 적용한다.
+
+  - node_id: macro_node
+    node_name: Macro Node
+    status: active
+    node_type: analyzer
+    stage: 3
+    owner_dimension: macro
+    description: 금리, 환율, 유동성, 변동성, 원자재, 글로벌 경기 환경을 분석한다.
+
+    depends_on:
+      - plan_node
+    downstream_nodes:
+      - synthesize_node
+
+    input_schema:
+      required:
+        - asset_code
+        - asset_class
+        - region
+        - currency
+        - horizon
+        - selected_factors
+      optional:
+        - macro_data
+      fields:
+        asset_code:
+          type: string
+        asset_class:
+          type: string
+        region:
+          type: string
+        currency:
+          type: string
+        horizon:
+          type: string
+        selected_factors:
+          type: array
+        macro_data:
+          type: object
+
+    output_schema:
+      required:
+        - dimension
+        - signal
+        - confidence
+        - summary
+        - key_evidence
+        - risks
+      fields:
+        dimension:
+          type: string
+          fixed_value: macro
+        signal:
+          type: string
+        confidence:
+          type: float
+        summary:
+          type: string
+        rate_view:
+          type: string
+        fx_view:
+          type: string
+        liquidity_view:
+          type: string
+        volatility_view:
+          type: string
+        commodity_view:
+          type: string
+        key_evidence:
+          type: array
+        risks:
+          type: array
+        missing_data:
+          type: array
+
+    expected_data_specs:
+      - DS_FX_USDKRW
+      - DS_RATE_KR_TREASURY
+      - DS_RATE_US_TREASURY
+      - DS_US_DOLLAR_INDEX
+      - DS_VOLATILITY_VIX
+      - DS_VOLATILITY_VKOSPI
+      - DS_COMMODITY_WTI
+      - DS_COMMODITY_BRENT
+      - DS_COMMODITY_GOLD
+
+    process_steps:
+      - 자산군에 필요한 macro factor를 확인한다.
+      - 금리, 환율, 유동성, 변동성, 원자재 데이터를 수집한다.
+      - 각 지표의 방향성과 자산 가격 민감도를 평가한다.
+      - 단기 충격과 중장기 추세를 구분한다.
+      - macro 환경이 해당 자산에 우호적인지 판단한다.
+
+    analysis_rules:
+      - KR Equity에는 USDKRW, 미국채 금리, 한국 금리, VIX/VKOSPI, 유가를 우선 반영한다.
+      - US Equity에는 미국채 금리, 실질금리, DXY, VIX를 우선 반영한다.
+      - FX에는 금리차, 달러지수, 위험선호, 정책 발언을 우선 반영한다.
+      - 금리 상승은 일반적으로 valuation 부담으로 해석하되 금융주는 예외 가능성을 둔다.
+      - 환율 상승은 수출주에는 일부 긍정, 외국인 수급과 국내 위험자산에는 부담으로 나눠 해석한다.
+
+    failure_modes:
+      - code: MACRO_DATA_MISSING
+        description: 주요 macro 데이터 누락
+        handling: missing_data에 기록하고 사용 가능한 지표만으로 분석한다.
+      - code: STALE_MACRO_DATA
+        description: 데이터 기준일이 오래됨
+        handling: freshness warning을 추가하고 confidence를 낮춘다.
+      - code: MIXED_MACRO_SIGNAL
+        description: 금리, 환율, 변동성 신호가 상충
+        handling: signal을 mixed로 두고 driver별로 분해한다.
+
+    retry_policy:
+      max_retries: 2
+      retry_on:
+        - MACRO_DATA_MISSING
+        - STALE_MACRO_DATA
+
+    quality_checks:
+      - 각 macro 지표의 기준일을 명시해야 한다.
+      - 금리와 환율의 방향성을 자산에 대한 영향으로 번역해야 한다.
+      - macro summary는 단순 지표 나열이 아니라 투자 환경 평가여야 한다.
+      - 상충 신호가 있으면 mixed로 표시해야 한다.
+
+    prompt_guidelines:
+      - 금리가 올랐다는 말에서 끝내지 말고 해당 자산의 할인율, 수급, 이익 전망에 미치는 영향을 설명한다.
+      - 환율은 수출기업 효과와 외국인 자금 흐름 효과를 분리한다.
+      - macro 환경을 과도하게 단정하지 않는다.
+
+  - node_id: flow_node
+    node_name: Flow Node
+    status: active
+    node_type: analyzer
+    stage: 3
+    owner_dimension: flow
+    description: 외국인, 기관, 개인, 선물, 프로그램, ETF 등 자금 흐름과 수급을 분석한다.
+
+    depends_on:
+      - plan_node
+    downstream_nodes:
+      - synthesize_node
+
+    input_schema:
+      required:
+        - asset_code
+        - asset_class
+        - market
+        - horizon
+        - selected_factors
+      optional:
+        - investor_flow_data
+        - futures_data
+        - program_trading_data
+        - etf_flow_data
+      fields:
+        asset_code:
+          type: string
+        asset_class:
+          type: string
+        market:
+          type: string
+        horizon:
+          type: string
+        selected_factors:
+          type: array
+        investor_flow_data:
+          type: object
+        futures_data:
+          type: object
+        program_trading_data:
+          type: object
+        etf_flow_data:
+          type: object
+
+    output_schema:
+      required:
+        - dimension
+        - signal
+        - confidence
+        - summary
+        - key_evidence
+        - risks
+      fields:
+        dimension:
+          type: string
+          fixed_value: flow
+        signal:
+          type: string
+        confidence:
+          type: float
+        summary:
+          type: string
+        foreign_flow_view:
+          type: string
+        institution_flow_view:
+          type: string
+        retail_flow_view:
+          type: string
+        futures_positioning_view:
+          type: string
+        program_trading_view:
+          type: string
+        key_evidence:
+          type: array
+        risks:
+          type: array
+        missing_data:
+          type: array
+
+    expected_data_specs:
+      - DS_KR_EQUITY_INVESTOR_FLOW
+      - DS_KR_INDEX_INVESTOR_FLOW
+      - DS_KR_INDEX_FUTURES
+      - DS_KR_INDEX_FUTURES_BASIS
+      - DS_KR_INDEX_PROGRAM_TRADING
+      - DS_ETF_FLOW
+
+    process_steps:
+      - 투자자별 순매수 데이터를 확인한다.
+      - 외국인과 기관의 방향성을 분리해 평가한다.
+      - 지수 자산의 경우 선물 미결제약정, 베이시스, 프로그램 매매를 함께 본다.
+      - 단기 수급과 중기 누적 수급을 구분한다.
+      - 장중 추정치와 장마감 확정치를 구분한다.
+
+    analysis_rules:
+      - 외국인 순매수 확대는 대체로 수급 개선 신호로 본다.
+      - 외국인 현물 매수와 선물 매수가 동시에 나타나면 수급 신뢰도를 높인다.
+      - 지수 상승 중 미결제약정 증가가 동반되면 추세 지속 가능성을 높게 본다.
+      - 개인 과도한 순매수와 외국인 순매도 조합은 단기 부담으로 볼 수 있다.
+      - 프로그램 비차익 매수는 시장 전반 수급 개선 신호로 볼 수 있다.
+      - 장중 가집계 데이터는 확정 데이터보다 confidence를 낮게 둔다.
+
+    failure_modes:
+      - code: FLOW_DATA_MISSING
+        description: 투자자별 수급 데이터 누락
+        handling: missing_data에 기록하고 가격/거래량 기반 보조 판단을 사용한다.
+      - code: ESTIMATED_FLOW_ONLY
+        description: 장중 추정치만 존재
+        handling: is_estimated warning을 추가하고 confidence를 낮춘다.
+      - code: FLOW_SIGNAL_CONFLICT
+        description: 현물과 선물 수급이 상충
+        handling: signal을 mixed로 두고 현물/선물을 분리해서 설명한다.
+
+    retry_policy:
+      max_retries: 2
+      retry_on:
+        - FLOW_DATA_MISSING
+
+    quality_checks:
+      - 수급 데이터의 단위와 누적 기준을 명확히 표시해야 한다.
+      - 종목별 수급과 시장 전체 수급을 혼동하면 안 된다.
+      - 장중 추정치인지 확정치인지 표시해야 한다.
+      - flow summary는 단기 투자전략과 연결되어야 한다.
+
+    prompt_guidelines:
+      - 수급은 가격 방향의 원인이 아니라 단기 압력으로 표현한다.
+      - 외국인, 기관, 개인을 한 문장으로 뭉뚱그리지 말고 분리한다.
+      - 선물/현물/프로그램 매매의 의미를 구분한다.
+
+  - node_id: industry_node
+    node_name: Industry Node
+    status: active
+    node_type: analyzer
+    stage: 3
+    owner_dimension: industry
+    description: 업종 사이클, 피어 그룹, 산업 수요/공급, 가격 지표, 업종 상대성과를 분석한다.
+
+    depends_on:
+      - plan_node
+    downstream_nodes:
+      - synthesize_node
+
+    input_schema:
+      required:
+        - asset_code
+        - asset_class
+        - sector
+        - horizon
+        - selected_factors
+      optional:
+        - industry_data
+        - peer_data
+        - sector_performance_data
+      fields:
+        asset_code:
+          type: string
+        asset_class:
+          type: string
+        sector:
+          type: string
+        horizon:
+          type: string
+        selected_factors:
+          type: array
+        industry_data:
+          type: object
+        peer_data:
+          type: object
+        sector_performance_data:
+          type: object
+
+    output_schema:
+      required:
+        - dimension
+        - signal
+        - confidence
+        - summary
+        - key_evidence
+        - risks
+      fields:
+        dimension:
+          type: string
+          fixed_value: industry
+        signal:
+          type: string
+        confidence:
+          type: float
+        summary:
+          type: string
+        cycle_view:
+          type: string
+        demand_supply_view:
+          type: string
+        peer_view:
+          type: string
+        sector_relative_view:
+          type: string
+        key_evidence:
+          type: array
+        risks:
+          type: array
+        missing_data:
+          type: array
+
+    expected_data_specs:
+      - DS_INDUSTRY_SECTOR_PERFORMANCE
+      - DS_INDUSTRY_PEER_VALUATION
+      - DS_INDUSTRY_SEMICONDUCTOR_PRICE
+      - DS_INDUSTRY_EXPORTS
+      - DS_INDUSTRY_NEWS
+
+    process_steps:
+      - 자산의 sector를 확인한다.
+      - sector별 핵심 업황 지표를 선택한다.
+      - 업종 수익률과 피어 그룹 성과를 비교한다.
+      - 수요/공급, 가격, 재고, 수출 등 산업 사이클을 분석한다.
+      - 산업 환경이 개별 자산 또는 지수에 미치는 영향을 요약한다.
+
+    analysis_rules:
+      - 반도체 업종은 메모리 가격, HBM 수요, CAPEX, 재고, 피어 주가를 우선 본다.
+      - 금융주는 금리, 예대마진, 신용비용, 규제 이슈를 우선 본다.
+      - 자동차는 환율, 판매량, 원가, 미국/유럽 수요, 관세 이슈를 우선 본다.
+      - 업종 지표와 개별 종목 이슈가 충돌하면 둘을 분리해 설명한다.
+      - 업종 상대성과가 강하지만 valuation 부담이 크면 mixed로 평가할 수 있다.
+
+    failure_modes:
+      - code: INDUSTRY_DATA_MISSING
+        description: 업종 데이터 부족
+        handling: 피어 가격, 뉴스, 매크로 민감도로 보조 분석한다.
+      - code: SECTOR_NOT_MAPPED
+        description: Asset Taxonomy의 sector가 industry rule에 없음
+        handling: generic sector analysis를 수행하고 confidence를 낮춘다.
+      - code: PEER_DATA_MISSING
+        description: 피어 데이터 누락
+        handling: sector index 또는 ETF 데이터를 대체 사용한다.
+
+    retry_policy:
+      max_retries: 1
+      retry_on:
+        - INDUSTRY_DATA_MISSING
+        - PEER_DATA_MISSING
+
+    quality_checks:
+      - 업종 분석은 개별 종목 분석과 구분되어야 한다.
+      - 업종 사이클의 방향성과 투자기간이 연결되어야 한다.
+      - 피어 비교가 있으면 비교 대상이 명확해야 한다.
+      - 산업 데이터가 없으면 추정임을 명시해야 한다.
+
+    prompt_guidelines:
+      - 업종 전망을 단순히 좋다/나쁘다로 말하지 말고 수요, 공급, 가격, 피어 흐름으로 나눠 설명한다.
+      - 개별 종목 호재를 업종 전체 호재로 과장하지 않는다.
+      - 장기 전망에서는 산업 구조 변화와 사이클을 함께 본다.
+
+  - node_id: valuation_node
+    node_name: Valuation Node
+    status: active
+    node_type: analyzer
+    stage: 3
+    owner_dimension: valuation
+    description: PER, PBR, EPS revision, ROE, 역사적 밴드, 피어 밸류에이션을 분석한다.
+
+    depends_on:
+      - plan_node
+    downstream_nodes:
+      - synthesize_node
+
+    input_schema:
+      required:
+        - asset_code
+        - asset_class
+        - sector
+        - horizon
+        - selected_factors
+      optional:
+        - valuation_data
+        - earnings_data
+        - peer_valuation_data
+      fields:
+        asset_code:
+          type: string
+        asset_class:
+          type: string
+        sector:
+          type: string
+        horizon:
+          type: string
+        selected_factors:
+          type: array
+        valuation_data:
+          type: object
+        earnings_data:
+          type: object
+        peer_valuation_data:
+          type: object
+
+    output_schema:
+      required:
+        - dimension
+        - signal
+        - confidence
+        - summary
+        - key_evidence
+        - risks
+      fields:
+        dimension:
+          type: string
+          fixed_value: valuation
+        signal:
+          type: string
+        confidence:
+          type: float
+        summary:
+          type: string
+        absolute_valuation_view:
+          type: string
+        relative_valuation_view:
+          type: string
+        earnings_revision_view:
+          type: string
+        historical_band_view:
+          type: string
+        key_evidence:
+          type: array
+        risks:
+          type: array
+        missing_data:
+          type: array
+
+    expected_data_specs:
+      - DS_VALUATION_PER_PBR
+      - DS_VALUATION_FORWARD_EPS
+      - DS_VALUATION_EPS_REVISION
+      - DS_VALUATION_PEER_MULTIPLES
+      - DS_VALUATION_HISTORICAL_BAND
+
+    process_steps:
+      - 현재 valuation level을 확인한다.
+      - 역사적 밴드 대비 위치를 평가한다.
+      - 피어 그룹 대비 할인/프리미엄을 계산한다.
+      - EPS revision 방향성을 확인한다.
+      - valuation 매력과 이익 모멘텀을 함께 판단한다.
+
+    analysis_rules:
+      - 낮은 PER/PBR만으로 매수 신호를 주지 않는다.
+      - EPS revision이 상향이면 높은 valuation을 일부 정당화할 수 있다.
+      - EPS revision이 하향이면 낮은 valuation도 value trap일 수 있다.
+      - 역사적 밴드 하단은 긍정 요인이지만 macro/industry 악화와 함께 보면 신중하게 평가한다.
+      - 지수 valuation은 금리 수준과 ERP 맥락에서 해석한다.
+
+    failure_modes:
+      - code: VALUATION_DATA_MISSING
+        description: valuation 데이터 누락
+        handling: 가격, 이익 전망, 피어 데이터로 대체 분석한다.
+      - code: EARNINGS_DATA_MISSING
+        description: EPS 또는 실적 전망 데이터 누락
+        handling: valuation confidence를 낮추고 누락을 명시한다.
+      - code: PEER_MISMATCH
+        description: 피어 그룹이 부적절함
+        handling: peer_view를 제외하거나 sector 평균으로 대체한다.
+
+    retry_policy:
+      max_retries: 1
+      retry_on:
+        - VALUATION_DATA_MISSING
+        - EARNINGS_DATA_MISSING
+
+    quality_checks:
+      - valuation 판단은 이익 방향성과 함께 제시해야 한다.
+      - 절대 valuation과 상대 valuation을 구분해야 한다.
+      - trailing과 forward 지표를 혼동하면 안 된다.
+      - valuation 부담이 있으면 risk에 포함해야 한다.
+
+    prompt_guidelines:
+      - 싸다/비싸다 표현은 기준을 함께 제시한다.
+      - valuation은 매수 타이밍보다 기대수익률과 리스크 판단에 가깝게 설명한다.
+      - 이익 추정치의 신뢰도를 반드시 고려한다.
+
+  - node_id: synthesize_node
+    node_name: Synthesize Node
+    status: active
+    node_type: aggregator
+    stage: 4
+    owner_dimension: synthesis
+    description: 각 분석 노드의 결과를 취합해 종합 투자전망과 실행 가능한 투자전략을 작성한다.
+
+    depends_on:
+      - macro_node
+      - flow_node
+      - industry_node
+      - valuation_node
+    downstream_nodes:
+      - evaluate_node
+
+    input_schema:
+      required:
+        - user_query
+        - classification_result
+        - execution_plan
+        - dimension_results
+      optional:
+        - user_profile
+      fields:
+        user_query:
+          type: string
+        classification_result:
+          type: object
+        execution_plan:
+          type: object
+        dimension_results:
+          type: object
+          description: issue, macro, flow, industry, valuation, technical, risk 분석 결과
+        user_profile:
+          type: object
+
+    output_schema:
+      required:
+        - final_view
+        - confidence
+        - investment_horizon
+        - summary
+        - strategy
+        - scenario_analysis
+        - key_evidence
+        - key_risks
+        - monitoring_indicators
+        - final_report
+      fields:
+        final_view:
+          type: string
+          allowed_values:
+            - positive
+            - neutral
+            - negative
+            - mixed
+            - unknown
+        confidence:
+          type: float
+        investment_horizon:
+          type: string
+        summary:
+          type: string
+        strategy:
+          type: object
+          fields:
+            action: string
+            entry_strategy: string
+            position_sizing: string
+            risk_control: string
+            review_condition: string
+        scenario_analysis:
+          type: object
+          fields:
+            base: string
+            bull: string
+            bear: string
+        key_evidence:
+          type: array
+        key_risks:
+          type: array
+        monitoring_indicators:
+          type: array
+        final_report:
+          type: string
+
+    synthesis_rules:
+      - high priority factor의 결론을 우선 반영한다.
+      - macro, flow, industry, valuation간 상충을 명시한다.
+      - 단기 질문이면 flow의 비중을 높인다.
+      - 장기 질문이면 macro, industry, valuation의 비중을 높인다.
+      - confidence는 데이터 완전성, 신호 일관성, factor coverage를 반영한다.
+      - 하나의 강한 factor만으로 최종 매수/매도 결론을 내리지 않는다.
+
+    recommended_report_structure:
+      - 질문 재정의
+      - 결론 요약
+      - 투자기간
+      - 핵심 근거
+      - 차원별 분석 요약
+      - 상승 시나리오
+      - 하락 시나리오
+      - 투자전략
+      - 리스크 및 모니터링 지표
+      - 신뢰도와 한계
+
+    failure_modes:
+      - code: DIMENSION_RESULT_MISSING
+        description: 일부 분석 노드 결과 누락
+        handling: 누락된 차원을 명시하고 confidence를 낮춘다.
+      - code: SIGNAL_CONFLICT
+        description: 차원별 신호가 크게 상충
+        handling: final_view를 mixed 또는 neutral로 조정하고 상충 요인을 설명한다.
+      - code: OVERCONFIDENT_OUTPUT
+        description: 근거 대비 결론이 과도하게 단정적
+        handling: confidence를 낮추고 조건부 표현으로 수정한다.
+
+    retry_policy:
+      max_retries: 1
+      retry_on:
+        - OVERCONFIDENT_OUTPUT
+        - DIMENSION_RESULT_MISSING
+
+    quality_checks:
+      - 최종 결론은 질문에 직접 답해야 한다.
+      - 매수/관망/분할매수/리스크 관리 중 하나 이상의 행동 전략이 있어야 한다.
+      - 상승/하락 시나리오가 모두 포함되어야 한다.
+      - 단정적 표현을 피하고 조건과 근거를 함께 제시해야 한다.
+      - key_evidence와 key_risks가 모두 있어야 한다.
+
+    prompt_guidelines:
+      - 보고서는 투자 조언처럼 단정하지 말고 전망과 전략으로 표현한다.
+      - 사용자 질문의 투자기간에 맞게 결론을 낸다.
+      - 데이터 한계가 있으면 숨기지 않는다.
+      - 최종 전략은 실행 가능해야 한다.
+
+  - node_id: evaluate_node
+    node_name: Evaluate Node
+    status: active
+    node_type: evaluator
+    stage: 5
+    owner_dimension: evaluation
+    description: 생성된 투자전략보고서의 근거 충분성, 데이터 신선도, 일관성, 리스크 인식, 과신 여부를 평가한다.
+
+    depends_on:
+      - synthesize_node
+    downstream_nodes:
+      - report_formatter_node
+
+    input_schema:
+      required:
+        - user_query
+        - classification_result
+        - execution_plan
+        - dimension_results
+        - final_report
+      optional:
+        - evaluation_rubric
+      fields:
+        user_query:
+          type: string
+        classification_result:
+          type: object
+        execution_plan:
+          type: object
+        dimension_results:
+          type: object
+        final_report:
+          type: string
+        evaluation_rubric:
+          type: object
+
+    output_schema:
+      required:
+        - evaluation_score
+        - passed
+        - rubric_scores
+        - warnings
+        - improvement_suggestions
+      fields:
+        evaluation_score:
+          type: integer
+          range: "0 to 100"
+        passed:
+          type: boolean
+        rubric_scores:
+          type: object
+          fields:
+            evidence_coverage: integer
+            data_freshness: integer
+            logical_consistency: integer
+            risk_awareness: integer
+            actionability: integer
+            overconfidence_control: integer
+            user_fit: integer
+        warnings:
+          type: array
+        critical_issues:
+          type: array
+        improvement_suggestions:
+          type: array
+        missing_factors:
+          type: array
+        revised_summary:
+          type: string
+
+    evaluation_rubric:
+      evidence_coverage:
+        max_score: 20
+        description: 선택된 주요 factor가 충분히 반영되었는지 평가
+      data_freshness:
+        max_score: 15
+        description: 데이터 기준일, 단위, 추정 여부가 명확한지 평가
+      logical_consistency:
+        max_score: 20
+        description: 차원별 분석과 최종 결론이 논리적으로 연결되는지 평가
+      risk_awareness:
+        max_score: 15
+        description: downside risk와 반대 시나리오가 충분한지 평가
+      actionability:
+        max_score: 15
+        description: 투자전략이 실행 가능한 수준으로 구체적인지 평가
+      overconfidence_control:
+        max_score: 10
+        description: 근거 대비 과도하게 단정하지 않았는지 평가
+      user_fit:
+        max_score: 5
+        description: 사용자 질문의 투자기간과 의도에 맞는 답변인지 평가
+
+    failure_modes:
+      - code: LOW_EVIDENCE_COVERAGE
+        description: 주요 factor가 누락됨
+        handling: missing_factors에 기록하고 score를 낮춘다.
+      - code: STALE_OR_UNCLEAR_DATA
+        description: 데이터 기준일 또는 단위가 불명확함
+        handling: warnings에 기록한다.
+      - code: INCONSISTENT_CONCLUSION
+        description: 분석 내용과 최종 결론이 불일치
+        handling: critical_issues에 기록하고 passed를 false로 설정한다.
+      - code: OVERCONFIDENCE
+        description: 불확실성 대비 결론이 단정적
+        handling: overconfidence warning을 추가한다.
+      - code: MISSING_RISK_SCENARIO
+        description: 하락 시나리오 또는 리스크 관리 기준 누락
+        handling: score를 낮추고 improvement_suggestions에 추가한다.
+
+    retry_policy:
+      max_retries: 0
+      retry_on: []
+
+    quality_checks:
+      - evaluation_score가 70 미만이면 passed는 false여야 한다.
+      - critical_issues가 있으면 passed는 false여야 한다.
+      - missing_factors가 있으면 improvement_suggestions에 반영해야 한다.
+      - 평가 결과는 Error / Improvement Log에 기록 가능해야 한다.
+
+    prompt_guidelines:
+      - 보고서를 칭찬하는 것이 아니라 품질을 검증한다.
+      - 근거 부족, 데이터 시점 불명확, 과신 표현을 적극적으로 찾아낸다.
+      - 개선 제안은 다음 실행에서 바로 반영 가능하게 작성한다.
+
+  - node_id: report_formatter_node
+    node_name: Report Formatter Node
+    status: draft
+    node_type: formatter
+    stage: 6
+    owner_dimension: formatting
+    description: 최종 보고서와 평가 결과를 사용자용 출력, Notion 저장용 페이지, 실행 로그용 요약으로 포맷팅한다.
+
+    depends_on:
+      - evaluate_node
+    downstream_nodes: []
+
+    input_schema:
+      required:
+        - final_report
+        - evaluation_result
+        - classification_result
+        - execution_plan
+      optional:
+        - notion_page_template
+      fields:
+        final_report:
+          type: string
+        evaluation_result:
+          type: object
+        classification_result:
+          type: object
+        execution_plan:
+          type: object
+        notion_page_template:
+          type: string
+
+    output_schema:
+      required:
+        - user_facing_report
+        - notion_report_page
+        - report_run_summary
+      fields:
+        user_facing_report:
+          type: string
+        notion_report_page:
+          type: object
+        report_run_summary:
+          type: object
+        tags:
+          type: array
+
+    formatting_rules:
+      - 사용자용 보고서는 너무 긴 내부 JSON을 노출하지 않는다.
+      - Notion 저장용 페이지에는 입력, factor, 노드별 결과, 평가 결과를 포함한다.
+      - Report Runs DB에는 요약 필드만 저장한다.
+      - 긴 분석 본문은 Report Runs의 child page에 저장한다.
+
+    failure_modes:
+      - code: FORMAT_TEMPLATE_MISSING
+        description: Notion 페이지 템플릿이 없음
+        handling: 기본 템플릿을 사용한다.
+      - code: REPORT_TOO_LONG
+        description: 보고서가 너무 김
+        handling: summary와 full_report를 분리한다.
+
+    retry_policy:
+      max_retries: 1
+      retry_on:
+        - FORMAT_TEMPLATE_MISSING
+        - REPORT_TOO_LONG
+
+    quality_checks:
+      - user_facing_report에는 최종 결론과 전략이 포함되어야 한다.
+      - notion_report_page에는 run_id와 평가 결과가 포함되어야 한다.
+      - report_run_summary는 Report Runs DB property와 매핑 가능해야 한다.
+
+    prompt_guidelines:
+      - 사용자에게 보여줄 내용과 내부 저장용 내용을 분리한다.
+      - Notion에는 추적 가능한 구조로 저장한다.
+      - 평가 warning은 Error / Improvement Log로 넘길 수 있게 구조화한다.
+
+execution_graph:
+  entry_node: classify_node
+  terminal_node: report_formatter_node
+  edges:
+    - from: classify_node
+      to: plan_node
+    - from: plan_node
+      to: macro_node
+    - from: plan_node
+      to: flow_node
+    - from: plan_node
+      to: industry_node
+    - from: plan_node
+      to: valuation_node
+    - from: macro_node
+      to: synthesize_node
+    - from: flow_node
+      to: synthesize_node
+    - from: industry_node
+      to: synthesize_node
+    - from: valuation_node
+      to: synthesize_node
+    - from: synthesize_node
+      to: evaluate_node
+    - from: evaluate_node
+      to: report_formatter_node
+
+notion_mapping:
+  database_name: "03. Node Specs"
+  unique_key: node_id
+  properties:
+    Node ID: node_id
+    Node Name: node_name
+    Status: status
+    Node Type: node_type
+    Stage: stage
+    Owner Dimension: owner_dimension
+    Description: description
+    Depends On: depends_on
+    Downstream Nodes: downstream_nodes
+  page_body_sections:
+    - Input Schema
+    - Output Schema
+    - Expected Data Specs
+    - Process Steps
+    - Analysis Rules
+    - Failure Modes
+    - Retry Policy
+    - Quality Checks
+    - Prompt Guidelines
+
+sync_policy:
+  source_of_truth: configs/node_specs.yaml
+  notion_update_mode: upsert
+  unique_key: node_id
+  deprecated_handling: mark_as_deprecated
+  overwrite_page_body: true
+  preserve_manual_notes: true
