@@ -25,14 +25,9 @@ data_specs:
       endpoint_path: https://obank.kbstar.com/quics
       auth_required: false
 
-    coverage:
-      asset_classes: [fx]
-      markets: [KB]
-      regions: [KR]
-
     usage:
       dimensions: [macro]
-      related_factors: []
+      related_factors: [MACRO_FX_USDKRW]
 
     params:
       required:
@@ -41,12 +36,22 @@ data_specs:
           example: "20260601"
           default: null
           description: 조회 시작일 YYYYMMDD
-      optional:
         - name: end_date
           type: string
           example: "20260628"
-          default: today
-          description: 조회 종료일 YYYYMMDD. 생략 시 오늘.
+          default: null
+          description: 조회 종료일 YYYYMMDD
+      optional:
+        - name: base_ccy
+          type: string
+          example: "USD"
+          default: "USD"
+          description: 기준통화. 생략 시 USD.
+        - name: quote_ccy
+          type: string
+          example: "KRW"
+          default: "KRW"
+          description: 상대통화. 생략 시 KRW.
 
     data_contract:
       grain: macro_date
@@ -68,7 +73,7 @@ data_specs:
           type: string
           nullable: false
           unit: null
-          description: "kb"
+          description: "KB"
         - name: base_ccy
           type: string
           nullable: false
@@ -125,26 +130,32 @@ data_specs:
       endpoint_path: https://obank.kbstar.com/quics
       auth_required: false
 
-    coverage:
-      asset_classes: [fx]
-      markets: [KB]
-      regions: [KR]
-
     usage:
       dimensions: [macro]
-      related_factors: []
+      related_factors: [MACRO_FX_USDKRW]
 
     params:
-      required: []
-      optional:
-        - name: search_date
+      required:
+        - name: target_date
           type: string
           example: "20260619"
-          default: 자동(직전 영업일/당일)
+          default: null
           description: 조회 거래일 YYYYMMDD
+      optional:
+        - name: base_ccy
+          type: string
+          example: "USD"
+          default: "USD"
+          description: 기준통화. 생략 시 USD.
+        - name: quote_ccy
+          type: string
+          example: "KRW"
+          default: "KRW"
+          description: 상대통화. 생략 시 KRW.
+
 
     data_contract:
-      grain: asset_datetime
+      grain: macro_datetime
       frequency: intraday
       timezone: Asia/Seoul
       unit:
@@ -154,7 +165,7 @@ data_specs:
         daily_high: KRW
         daily_avg: KRW
       cumulative_type: intraday_snapshot
-      is_estimated: true
+      is_estimated: false
       update_timing: 장중 폴링 시점마다
       expected_lag: near-realtime(폴링 주기)
       history_available: 적재한 스냅샷 한도
@@ -163,6 +174,21 @@ data_specs:
       primary_key: [source, base_ccy, quote_ccy, target_date, observed_at]
       datetime_field: observed_at
       fields:
+        - name: source
+          type: string
+          nullable: false
+          unit: null
+          description: "KB"
+        - name: base_ccy
+          type: string
+          nullable: false
+          unit: null
+          description: 기준통화 "USD"
+        - name: quote_ccy
+          type: string
+          nullable: false
+          unit: null
+          description: 상대통화 "KRW"
         - name: target_date
           type: date
           nullable: false
@@ -213,7 +239,7 @@ data_specs:
         - last_rate > 0
 
     caveats:
-      - 장중 스냅샷(가집계 성격) → is_estimated true. as_of 조회는 observed_at 기준.
+      - as_of 조회는 observed_at 기준.
       - append-only. 같은 (key, observed_at) 재수집은 멱등 skip.
       - 가격 단위 KRW, timezone KST.
     notes: []
@@ -235,14 +261,9 @@ data_specs:
       endpoint_path: https://ecos.bok.or.kr/api/StatisticSearch
       auth_required: true
 
-    coverage:
-      asset_classes: []
-      markets: [KR]
-      regions: [KR]
-
     usage:
       dimensions: [macro]
-      related_factors: []
+      related_factors: [RATE_KR_GOV_3Y, RATE_KR_GOV_10Y, RATE_KR_GOV_30Y, RATE_KR_US_SPREAD]
 
     params:
       required:
@@ -256,6 +277,16 @@ data_specs:
           example: "10Y"
           default: null
           description: KOFR | 3Y | 10Y | 30Y | CD91 | CORP3Y_AA
+        - name: start_date
+          type: string
+          example: "2026-07-01"
+          default: null
+          description: 조회 시작일
+        - name: end_date
+          type: string
+          example: "2026-07-03"
+          default: null
+          description: 조회 종료일
       optional: []
 
     data_contract:
@@ -338,14 +369,9 @@ data_specs:
       endpoint_path: https://api.stlouisfed.org/fred/series/observations
       auth_required: true
 
-    coverage:
-      asset_classes: []
-      markets: [US]
-      regions: [US]
-
     usage:
       dimensions: [macro]
-      related_factors: []
+      related_factors: [RATE_US_2Y, RATE_US_10Y, RATE_US_30Y, RATE_US_5Y, RATE_SOFR, RATE_KR_US_SPREAD]
 
     params:
       required:
@@ -353,12 +379,22 @@ data_specs:
           type: string
           example: "US"
           default: null
-          description: 국가(라우팅 키)
+          description: 국가(서비스 라우팅 키)
         - name: tenor
           type: string
           example: "10Y"
           default: null
           description: SOFR | 2Y | 10Y | 30Y
+        - name: start_date
+          type: string
+          example: "2026-07-01"
+          default: null
+          description: 조회 시작일
+        - name: end_date
+          type: string
+          example: "2026-07-03"
+          default: null
+          description: 조회 종료일
       optional: []
 
     data_contract:
@@ -440,21 +476,26 @@ data_specs:
       endpoint_path: /uapi/domestic-stock/v1/quotations/comp-interest
       auth_required: true
 
-    coverage:
-      asset_classes: []
-      markets: [KR]
-      regions: [KR]
-
     usage:
       dimensions: [macro]
-      related_factors: []
+      related_factors: [RATE_KR_GOV_3Y, RATE_KR_GOV_10Y, RATE_KR_GOV_30Y, RATE_KR_CD91, RATE_KR_CORP3Y_AA]
 
     params:
-      required: []
+      required:
+        - name: country
+          type: string
+          example: "KR"
+          default: null
+          description: 국가(서비스 라우팅 키)
+        - name: tenor
+          type: string
+          example: "10Y"
+          default: null
+          description: 3Y|10Y|30Y|CD91|CORP3Y_AA
       optional: []
 
     data_contract:
-      grain: asset_datetime
+      grain: macro_datetime
       frequency: intraday
       timezone: Asia/Seoul
       unit:
@@ -462,7 +503,7 @@ data_specs:
         prdy_vrss: percent
         prdy_ctrt: percent
       cumulative_type: intraday_snapshot
-      is_estimated: true
+      is_estimated: false
       update_timing: 장중 폴링
       expected_lag: near-realtime
       history_available: 적재 스냅샷 한도
@@ -471,6 +512,11 @@ data_specs:
       primary_key: [source, country, tenor, observed_at]
       datetime_field: observed_at
       fields:
+        - name: source
+          type: string
+          nullable: false
+          unit: null
+          description: "kis"
         - name: country
           type: string
           nullable: false
@@ -525,7 +571,7 @@ data_specs:
         - current_rate between -2 and 20
 
     caveats:
-      - 장중 스냅샷 → is_estimated true. 단위 percent.
+      - 장중 스냅샷. 단위 percent.
       - KIS 1콜로 전 종목 반환 → service가 bcdt_code 필터링.
     notes:
       - KIS OAuth 토큰 필요(KISAuthClient).
@@ -547,14 +593,9 @@ data_specs:
       endpoint_path: https://api.stlouisfed.org/fred/series/observations
       auth_required: true
 
-    coverage:
-      asset_classes: []
-      markets: [US]
-      regions: [US]
-
     usage:
-      dimensions: [macro]
-      related_factors: []
+      dimensions: [macro, industry]
+      related_factors: [MACRO_DOLLAR_INDEX, RATE_US_BEI_10Y, RATE_US_REAL_10Y, VOL_VIX, SOX_INDEX]
 
     params:
       required:
@@ -563,8 +604,22 @@ data_specs:
           example: "VIXCLS"
           default: null
           description: DTWEXBGS|T10YIE|DFII10|NASDAQSOX|VIXCLS
-      optional: []
-
+        - name: start_date
+          type: string
+          example: "2026-06-01"
+          default: null
+          description: 조회 시작일 YYYY-MM-DD
+        - name: end_date
+          type: string
+          example: "2026-06-28"
+          default: null
+          description: 조회 종료일 YYYY-MM-DD
+      optional:
+        - name: resolution
+          type: string
+          example: "D"
+          default: "D"
+          description: D, M (월간 M 추가 가능)
     data_contract:
       grain: macro_date
       frequency: daily
@@ -623,7 +678,7 @@ data_specs:
         (DTWEXBGS:index, T10YIE/DFII10:percent, NASDAQSOX:index/pt, VIXCLS:pt)
       - 결측("." )은 null.
     notes:
-      - asset_class enum에 'rate/macro' 항목 없어 빈 배열. dimension=macro로만 표기.
+      - 시리즈마다 단위 확인 필요.
 
   # ===================================================================
   # 투자자 수급 (KIS)
@@ -642,14 +697,9 @@ data_specs:
       endpoint_path: /uapi/domestic-stock/v1/quotations/inquire-investor-daily-by-market
       auth_required: true
 
-    coverage:
-      asset_classes: [kr_index]
-      markets: [KOSPI, KOSDAQ]
-      regions: [KR]
-
     usage:
       dimensions: [flow]
-      related_factors: []
+      related_factors: [FLOW_FOREIGN_SPOT, FLOW_INSTITUTION_SPOT, FLOW_INDIVIDUAL_SPOT]
 
     params:
       required:
@@ -658,20 +708,30 @@ data_specs:
           example: "KOSPI"
           default: null
           description: KOSPI | KOSDAQ (→ KSP/KSQ)
+        - name: start_date
+          type: string
+          example: "2026-06-01"
+          default: null
+          description: 조회 시작일 YYYY-MM-DD
+        - name: end_date
+          type: string
+          example: "2026-06-28"
+          default: null
+          description: 조회 종료일 YYYY-MM-DD
       optional:
+        - name: investor_type
+          type: string
+          example: "orgn"
+          default: null
+          description: frgn/prsn/orgn/scrt/ivtr/pe_fund/bank/insu/mrbn/fund/etc/etc_orgt/etc_corp/frgn_reg/frgn_nreg
         - name: sector_code
           type: string
           example: "0001"
           default: "0001"
           description: 업종분류코드(0001=전체)
-        - name: date
-          type: string
-          example: "20260619"
-          default: today
-          description: 조회일 YYYYMMDD
 
     data_contract:
-      grain: asset_investor_date
+      grain: index_investor_date
       frequency: daily
       timezone: Asia/Seoul
       unit:
@@ -687,6 +747,11 @@ data_specs:
       primary_key: [source, scope, market, entity_code, investor_type, observation_date]
       datetime_field: observation_date
       fields:
+        - name: source
+          type: string
+          nullable: false
+          unit: null
+          description: "kis"
         - name: scope
           type: string
           nullable: false
@@ -758,14 +823,9 @@ data_specs:
       endpoint_path: /uapi/domestic-stock/v1/quotations/investor-trade-by-stock-daily
       auth_required: true
 
-    coverage:
-      asset_classes: [kr_equity]
-      markets: [KOSPI, KOSDAQ]
-      regions: [KR]
-
     usage:
       dimensions: [flow]
-      related_factors: []
+      related_factors: [FLOW_FOREIGN_SPOT, FLOW_INSTITUTION_SPOT, FLOW_INDIVIDUAL_SPOT]
 
     params:
       required:
@@ -774,12 +834,22 @@ data_specs:
           example: "005930"
           default: null
           description: 6자리 종목코드
-      optional:
-        - name: date
+        - name: start_date
           type: string
-          example: "20260619"
-          default: today
-          description: 기준일 YYYYMMDD
+          example: "2026-06-01"
+          default: null
+          description: 조회 시작일 YYYY-MM-DD
+        - name: end_date
+          type: string
+          example: "2026-06-28"
+          default: null
+          description: 조회 종료일 YYYY-MM-DD
+      optional:
+        - name: investor_type
+          type: string
+          example: "orgn"
+          default: null
+          description: frgn/prsn/orgn/scrt/ivtr/pe_fund/bank/insu/mrbn/fund/etc/etc_orgt/etc_corp/frgn_reg/frgn_nreg
 
     data_contract:
       grain: asset_investor_date
@@ -798,6 +868,11 @@ data_specs:
       primary_key: [source, scope, market, entity_code, investor_type, observation_date]
       datetime_field: observation_date
       fields:
+        - name: source
+          type: string
+          nullable: false
+          unit: null
+          description: "kis"
         - name: scope
           type: string
           nullable: false
@@ -870,14 +945,9 @@ data_specs:
       endpoint_path: /uapi/domestic-stock/v1/quotations/comp-program-trade-daily
       auth_required: true
 
-    coverage:
-      asset_classes: [kr_index]
-      markets: [KOSPI, KOSDAQ]
-      regions: [KR]
-
     usage:
       dimensions: [flow]
-      related_factors: []
+      related_factors: [PROGRAM_NET, PROGRAM_ARBT_NET, PROGRAM_NABT_NET]
 
     params:
       required:
@@ -886,20 +956,30 @@ data_specs:
           example: "KOSPI"
           default: null
           description: KOSPI | KOSDAQ (→ K/Q)
-      optional:
         - name: start_date
           type: string
-          example: "20260101"
-          default: ""
-          description: 검색시작일 YYYYMMDD(공백 시 ~당일)
+          example: "2026-06-01"
+          default: null
+          description: 조회 시작일 YYYY-MM-DD
         - name: end_date
           type: string
-          example: "20260628"
+          example: "2026-06-28"
+          default: null
+          description: 조회 종료일 YYYY-MM-DD
+      optional:
+        - name: trade_class
+          type: string
+          example: "arbt"
           default: ""
-          description: 검색종료일 YYYYMMDD
+          description: arbt(차익)|nabt(비차익)|whol(전체)
+        - name: account_type
+          type: string
+          example: "smtn"
+          default: ""
+          description: entm(위탁)|onsl(자기)|smtn(합계)
 
     data_contract:
-      grain: asset_date
+      grain: index_date
       frequency: daily
       timezone: Asia/Seoul
       unit:
@@ -919,6 +999,11 @@ data_specs:
       primary_key: [source, scope, entity_code, trade_class, account_type, observation_date]
       datetime_field: observation_date
       fields:
+        - name: source
+          type: string
+          nullable: false
+          unit: null
+          description: "kis"
         - name: scope
           type: string
           nullable: false
@@ -1008,14 +1093,9 @@ data_specs:
       endpoint_path: /uapi/domestic-stock/v1/quotations/program-trade-by-stock-daily
       auth_required: true
 
-    coverage:
-      asset_classes: [kr_equity]
-      markets: [KOSPI, KOSDAQ]
-      regions: [KR]
-
     usage:
       dimensions: [flow]
-      related_factors: []
+      related_factors: [PROGRAM_NET, PROGRAM_ARBT_NET, PROGRAM_NABT_NET]
 
     params:
       required:
@@ -1024,12 +1104,17 @@ data_specs:
           example: "005930"
           default: null
           description: 6자리 종목코드
-      optional:
-        - name: date
+        - name: start_date
           type: string
-          example: "20260619"
-          default: ""
-          description: 기준일 YYYYMMDD(공백 시 당일부터)
+          example: "2026-06-01"
+          default: null
+          description: 조회 시작일 YYYY-MM-DD
+        - name: end_date
+          type: string
+          example: "2026-06-28"
+          default: null
+          description: 조회 종료일 YYYY-MM-DD
+      optional: []
 
     data_contract:
       grain: asset_date
@@ -1052,6 +1137,11 @@ data_specs:
       primary_key: [source, scope, entity_code, trade_class, account_type, observation_date]
       datetime_field: observation_date
       fields:
+        - name: source
+          type: string
+          nullable: false
+          unit: null
+          description: "kis"
         - name: scope
           type: string
           nullable: false
@@ -1142,14 +1232,9 @@ data_specs:
       endpoint_path: /uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice
       auth_required: true
 
-    coverage:
-      asset_classes: [kr_equity]
-      markets: [KOSPI, KOSDAQ]
-      regions: [KR]
-
     usage:
-      dimensions: [industry]
-      related_factors: []
+      dimensions: [flow]
+      related_factors: [FLOW_OPEN, FLOW_HIGH, FLOW_LOW, FLOW_CLOSE, FLOW_VOLUME, FLOW_AMOUNT]
 
     params:
       required:
@@ -1163,27 +1248,22 @@ data_specs:
           example: "005930"
           default: null
           description: 티커
-      optional:
-        - name: period
+        - name: resolution
           type: string
           example: "D"
           default: "D"
           description: D|W|M|Y
         - name: start_date
           type: string
-          example: "20260101"
+          example: "2026-01-01"
           default: ""
-          description: YYYYMMDD
+          description: YYYY-MM-DD
         - name: end_date
           type: string
-          example: "20260628"
+          example: "2026-06-28"
           default: ""
-          description: YYYYMMDD
-        - name: adj
-          type: string
-          example: "0"
-          default: "0"
-          description: 0:수정주가 1:원주가
+          description: YYYY-MM-DD
+      optional: []
 
     data_contract:
       grain: asset_date
@@ -1206,6 +1286,11 @@ data_specs:
       primary_key: [source, asset_class, entity_code, resolution, observation_date]
       datetime_field: observation_date
       fields:
+        - name: source
+          type: string
+          nullable: false
+          unit: null
+          description: "kis"
         - name: asset_class
           type: string
           nullable: false
@@ -1292,18 +1377,13 @@ data_specs:
       endpoint_path: /uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice
       auth_required: true
 
-    coverage:
-      asset_classes: [kr_equity]
-      markets: [KOSPI, KOSDAQ]
-      regions: [KR]
-
     usage:
-      dimensions: [valuation, industry]
-      related_factors: []
+      dimensions: [valuation]
+      related_factors: [VAL_PER, VAL_PBR, VAL_EPS]
 
     params:
       required:
-        - name: entity_code
+        - name: ticker
           type: string
           example: "005930"
           default: null
@@ -1332,6 +1412,11 @@ data_specs:
       primary_key: [source, ticker, observed_at]
       datetime_field: observed_at
       fields:
+        - name: source
+          type: string
+          nullable: false
+          unit: null
+          description: "kis"
         - name: ticker
           type: string
           nullable: false
@@ -1426,14 +1511,9 @@ data_specs:
       endpoint_path: /uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice
       auth_required: true
 
-    coverage:
-      asset_classes: [kr_index]
-      markets: [KRX]
-      regions: [KR]
-
     usage:
-      dimensions: [macro, industry]
-      related_factors: []
+      dimensions: [flow, industry]
+      related_factors: [FLOW_OPEN, FLOW_HIGH, FLOW_LOW, FLOW_CLOSE, FLOW_VOLUME, FLOW_AMOUNT]
 
     params:
       required:
@@ -1447,22 +1527,22 @@ data_specs:
           example: "0001"
           default: null
           description: 업종코드(0001=종합)
-      optional:
-        - name: period
+        - name: resolution
           type: string
           example: "D"
           default: "D"
           description: D|W|M|Y
         - name: start_date
           type: string
-          example: "20260101"
+          example: "2026-01-01"
           default: ""
-          description: YYYYMMDD
+          description: YYYY-MM-DD
         - name: end_date
           type: string
-          example: "20260628"
+          example: "2026-06-28"
           default: ""
-          description: YYYYMMDD
+          description: YYYY-MM-DD
+      optional: []
 
     data_contract:
       grain: index_date
@@ -1485,6 +1565,11 @@ data_specs:
       primary_key: [source, asset_class, entity_code, resolution, observation_date]
       datetime_field: observation_date
       fields:
+        - name: source
+          type: string
+          nullable: false
+          unit: null
+          description: "kis"
         - name: asset_class
           type: string
           nullable: false
@@ -1571,14 +1656,9 @@ data_specs:
       endpoint_path: /uapi/domestic-futureoption/v1/quotations/inquire-daily-fuopchartprice
       auth_required: true
 
-    coverage:
-      asset_classes: [kr_index]
-      markets: [KRX]
-      regions: [KR]
-
     usage:
-      dimensions: [flow, macro]
-      related_factors: []
+      dimensions: [flow]
+      related_factors: [FLOW_OPEN, FLOW_HIGH, FLOW_LOW, FLOW_CLOSE, FLOW_VOLUME, FLOW_AMOUNT]
 
     params:
       required:
@@ -1589,28 +1669,29 @@ data_specs:
           description: "future"
         - name: entity_code
           type: string
-          example: "101W09"
+          example: "A01609"
           default: null
           description: 선물 종목코드
-      optional:
-        - name: period
+        - name: resolution
           type: string
           example: "D"
           default: "D"
           description: D|W|M|Y
         - name: start_date
           type: string
-          example: "20260301"
+          example: "2026-03-01"
           default: ""
-          description: YYYYMMDD
+          description: YYYY-MM-DD
         - name: end_date
           type: string
-          example: "20260628"
+          example: "2026-06-28"
           default: ""
-          description: YYYYMMDD
+          description: YYYY-MM-DD
+      optional: []
+
 
     data_contract:
-      grain: asset_date
+      grain: index_date
       frequency: daily
       timezone: Asia/Seoul
       unit:
@@ -1630,6 +1711,11 @@ data_specs:
       primary_key: [source, asset_class, entity_code, resolution, observation_date]
       datetime_field: observation_date
       fields:
+        - name: source
+          type: string
+          nullable: false
+          unit: null
+          description: "kis"
         - name: asset_class
           type: string
           nullable: false
@@ -1700,7 +1786,7 @@ data_specs:
     notes: []
 
   - data_spec_id: DS_KR_INDEX_FUTURES_BASIS
-    name: 선물옵션 스냅샷(베이시스/미결제약정)
+    name: 지수선물 스냅샷(베이시스/미결제약정)
     description: 베이시스·미결제약정·괴리율·이론가·KOSPI200 등 파생 스냅샷(output1).
     status: active
 
@@ -1713,26 +1799,21 @@ data_specs:
       endpoint_path: /uapi/domestic-futureoption/v1/quotations/inquire-daily-fuopchartprice
       auth_required: true
 
-    coverage:
-      asset_classes: [kr_index]
-      markets: [KRX]
-      regions: [KR]
-
     usage:
       dimensions: [flow]
-      related_factors: []
+      related_factors: [FUTURES_OI, FUTURES_OI_CHANGE, FUTURES_BASIS, FUTURES_BASIS_DISPARITY, FUTURES_TICK_STRENGTH]
 
     params:
       required:
         - name: entity_code
           type: string
-          example: "101W09"
+          example: "A01609"
           default: null
           description: 선물옵션 종목코드
       optional: []
 
     data_contract:
-      grain: asset_datetime
+      grain: index_datetime
       frequency: intraday
       timezone: Asia/Seoul
       unit:
@@ -1752,6 +1833,11 @@ data_specs:
       primary_key: [source, entity_code, observed_at]
       datetime_field: observed_at
       fields:
+        - name: source
+          type: string
+          nullable: false
+          unit: null
+          description: "kis"
         - name: entity_code
           type: string
           nullable: false
@@ -1850,14 +1936,9 @@ data_specs:
       endpoint_path: /uapi/domestic-futureoption/v1/quotations/inquire-daily-fuopchartprice
       auth_required: true
 
-    coverage:
-      asset_classes: [kr_index]
-      markets: [KRX]
-      regions: [KR]
-
     usage:
       dimensions: [flow]
-      related_factors: []
+      related_factors: [FLOW_OPEN, FLOW_HIGH, FLOW_LOW, FLOW_CLOSE, FLOW_VOLUME, FLOW_AMOUNT]
 
     params:
       required:
@@ -1868,28 +1949,28 @@ data_specs:
           description: "option"
         - name: entity_code
           type: string
-          example: "201W09320"
+          example: "B01608667"
           default: null
           description: 옵션 종목코드
-      optional:
-        - name: period
+        - name: resolution
           type: string
           example: "D"
           default: "D"
           description: D|W|M|Y
         - name: start_date
           type: string
-          example: "20260301"
+          example: "2026-03-01"
           default: ""
-          description: YYYYMMDD
+          description: YYYY-MM-DD
         - name: end_date
           type: string
-          example: "20260628"
+          example: "2026-06-28"
           default: ""
-          description: YYYYMMDD
+          description: YYYY-MM-DD
+      optional: []
 
     data_contract:
-      grain: asset_date
+      grain: index_date
       frequency: daily
       timezone: Asia/Seoul
       unit:
@@ -1909,6 +1990,11 @@ data_specs:
       primary_key: [source, asset_class, entity_code, resolution, observation_date]
       datetime_field: observation_date
       fields:
+        - name: source
+          type: string
+          nullable: false
+          unit: null
+          description: "kis"
         - name: asset_class
           type: string
           nullable: false
@@ -1979,3 +2065,139 @@ data_specs:
       - output1 스냅샷은 DS_KR_INDEX_FUTURES_BASIS와 동일 구조로 derivative_snapshot 적재.
     notes:
       - 옵션 output 필드 선물과 동일성 실측 확인 필요.
+
+  - data_spec_id: DS_KR_INDEX_OPTIONS_BASIS
+    name: 지수옵션 스냅샷(베이시스/미결제약정)
+    description: 괴리율·이론가 등 파생 스냅샷(output1).
+    status: active
+
+    source:
+      provider: KIS
+      source_type: api
+      module: app.scrapers.kis.kis_chart_scraper
+      function: fetch_period_chart
+      endpoint_name: 선물옵션기간별시세 output1 [국내선물-008]
+      endpoint_path: /uapi/domestic-futureoption/v1/quotations/inquire-daily-fuopchartprice
+      auth_required: true
+
+    usage:
+      dimensions: [flow]
+      related_factors: [FUTURES_BASIS_DISPARITY]
+
+    params:
+      required:
+        - name: entity_code
+          type: string
+          example: "A01609"
+          default: null
+          description: 선물옵션 종목코드
+      optional: []
+
+    data_contract:
+      grain: index_datetime
+      frequency: intraday
+      timezone: Asia/Seoul
+      unit:
+        current_price: pt
+        basis: pt
+        kospi200: pt
+        open_interest: contracts
+        theoretical_price: pt
+        disparity: percent
+      cumulative_type: intraday_snapshot
+      is_estimated: false
+      update_timing: 호출 시점(현재값)
+      expected_lag: near-realtime
+      history_available: 적재 스냅샷 한도
+
+    output_schema:
+      primary_key: [source, entity_code, observed_at]
+      datetime_field: observed_at
+      fields:
+        - name: source
+          type: string
+          nullable: false
+          unit: null
+          description: "kis"
+        - name: entity_code
+          type: string
+          nullable: false
+          unit: null
+          description: 선물옵션 종목코드
+        - name: observed_at
+          type: datetime
+          nullable: false
+          unit: null
+          description: 스냅샷 시점(KST)
+        - name: name
+          type: string
+          nullable: true
+          unit: null
+          description: HTS 한글 종목명
+        - name: current_price
+          type: float
+          nullable: true
+          unit: pt
+          description: 현재가
+        - name: upper_limit
+          type: float
+          nullable: true
+          unit: pt
+          description: 상한가
+        - name: lower_limit
+          type: float
+          nullable: true
+          unit: pt
+          description: 하한가
+        - name: basis
+          type: float
+          nullable: true
+          unit: pt
+          description: 베이시스 (NULL)
+        - name: kospi200
+          type: float
+          nullable: true
+          unit: pt
+          description: KOSPI200 지수 (0.0000)
+        - name: open_interest
+          type: float
+          nullable: true
+          unit: contracts
+          description: 미결제약정 수량 (0.00)
+        - name: oi_change
+          type: float
+          nullable: true
+          unit: contracts
+          description: 미결제약정 증감 (0.00)
+        - name: theoretical_price
+          type: float
+          nullable: true
+          unit: pt
+          description: 이론가
+        - name: disparity
+          type: float
+          nullable: true
+          unit: percent
+          description: 괴리율
+        - name: tick_strength
+          type: float
+          nullable: true
+          unit: null
+          description: 당일 체결강도 (0.0000)
+        - name: ingested_at
+          type: datetime
+          nullable: false
+          unit: null
+          description: 적재 시각(UTC)
+
+    validation:
+      freshness_check: true
+      max_missing_ratio: 0.1
+      required_fields: [entity_code, observed_at]
+      sanity_checks:
+        - open_interest >= 0 or open_interest is null
+
+    caveats:
+      - output1(현재 시점) 1건만 → append-only 스냅샷. as_of=observed_at.
+      - basis, kospi200, OI, OI Change, tick strength null
+    notes: []

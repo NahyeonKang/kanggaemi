@@ -2,11 +2,9 @@ version: "0.1.0"
 updated_at: "2026-06-28"
 
 # 에이전트 분석의 가설 시드(hypothesis seed).
-# - data_spec_id: data_specs.yaml의 DataSpec 참조. 미수집 데이터는 null + status:draft.
+# - data_spec_ids: data_specs.yaml의 DataSpec 참조. 미수집 데이터는 null + status:draft.
 # - status: active(현재 계산 가능) | draft(데이터/구현 미비) | deprecated.
 # - transform: 원자료 → 팩터 신호 변환 규칙.
-# - 한 팩터가 여러 asset_class에 적용될 수 있음. data_spec_id는 대표 소스 1개를 적고,
-#   변형/대체 소스는 caveats에 명시.
 
 factors:
 
@@ -16,8 +14,8 @@ factors:
   - factor_id: MACRO_FX_USDKRW
     factor_name: USD/KRW 환율
     dimension: macro
-    asset_classes: [kr_index, kr_equity]
-    data_spec_id: DS_FX_USDKRW_DAILY
+    asset_classes: [fx, kr_index, kr_equity]
+    data_spec_ids: [DS_FX_USDKRW_DAILY, DS_FX_USDKRW_INTRADAY]
     frequency: daily
     unit: KRW
     cumulative_type: point_in_time
@@ -37,7 +35,7 @@ factors:
     factor_name: 달러인덱스
     dimension: macro
     asset_classes: [kr_index, us_index]
-    data_spec_id: DS_MACRO_US_CORE
+    data_spec_ids: DS_MACRO_US_CORE
     frequency: daily
     unit: index
     cumulative_type: point_in_time
@@ -57,7 +55,7 @@ factors:
     factor_name: 국고채 3년
     dimension: macro
     asset_classes: [kr_index]
-    data_spec_id: DS_RATE_KR_TREASURY
+    data_spec_ids: DS_RATE_KR_TREASURY
     frequency: daily
     unit: percent
     cumulative_type: point_in_time
@@ -77,7 +75,7 @@ factors:
     factor_name: 국고채 10년
     dimension: macro
     asset_classes: [kr_index]
-    data_spec_id: DS_RATE_KR_TREASURY
+    data_spec_ids: DS_RATE_KR_TREASURY
     frequency: daily
     unit: percent
     cumulative_type: point_in_time
@@ -97,7 +95,7 @@ factors:
     factor_name: 국고채 30년
     dimension: macro
     asset_classes: [kr_index]
-    data_spec_id: DS_RATE_KR_TREASURY
+    data_spec_ids: DS_RATE_KR_TREASURY
     frequency: daily
     unit: percent
     cumulative_type: point_in_time
@@ -117,7 +115,7 @@ factors:
     factor_name: 미국채 2년
     dimension: macro
     asset_classes: [kr_index, us_index]
-    data_spec_id: DS_RATE_US_TREASURY
+    data_spec_ids: DS_RATE_US_TREASURY
     frequency: daily
     unit: percent
     cumulative_type: point_in_time
@@ -137,7 +135,7 @@ factors:
     factor_name: 미국채 10년
     dimension: macro
     asset_classes: [kr_index, us_index]
-    data_spec_id: DS_RATE_US_TREASURY
+    data_spec_ids: DS_RATE_US_TREASURY
     frequency: daily
     unit: percent
     cumulative_type: point_in_time
@@ -157,7 +155,7 @@ factors:
     factor_name: 미국채 30년
     dimension: macro
     asset_classes: [us_index]
-    data_spec_id: DS_RATE_US_TREASURY
+    data_spec_ids: DS_RATE_US_TREASURY
     frequency: daily
     unit: percent
     cumulative_type: point_in_time
@@ -177,7 +175,7 @@ factors:
     factor_name: 미국채 5년
     dimension: macro
     asset_classes: [us_index]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: daily
     unit: percent
     cumulative_type: point_in_time
@@ -197,7 +195,7 @@ factors:
     factor_name: SOFR
     dimension: macro
     asset_classes: [us_index]
-    data_spec_id: DS_RATE_US_TREASURY
+    data_spec_ids: DS_RATE_US_TREASURY
     frequency: daily
     unit: percent
     cumulative_type: point_in_time
@@ -217,7 +215,7 @@ factors:
     factor_name: Effective Fed Funds Rate
     dimension: macro
     asset_classes: [us_index]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: daily
     unit: percent
     cumulative_type: point_in_time
@@ -237,7 +235,7 @@ factors:
     factor_name: 한미 금리 스프레드
     dimension: macro
     asset_classes: [kr_index]
-    data_spec_id: DS_RATE_KR_TREASURY
+    data_spec_ids: DS_RATE_KR_TREASURY
     frequency: daily
     unit: percent
     cumulative_type: point_in_time
@@ -257,7 +255,7 @@ factors:
     factor_name: 미국채 10년 실질금리
     dimension: macro
     asset_classes: [kr_index, us_index]
-    data_spec_id: DS_MACRO_US_CORE
+    data_spec_ids: DS_MACRO_US_CORE
     frequency: daily
     unit: percent
     cumulative_type: point_in_time
@@ -277,7 +275,7 @@ factors:
     factor_name: 미국채 10년 BEI
     dimension: macro
     asset_classes: [kr_index, us_index]
-    data_spec_id: DS_MACRO_US_CORE
+    data_spec_ids: DS_MACRO_US_CORE
     frequency: daily
     unit: percent
     cumulative_type: point_in_time
@@ -297,7 +295,7 @@ factors:
     factor_name: VIX
     dimension: macro
     asset_classes: [kr_index, us_index]
-    data_spec_id: DS_MACRO_US_CORE
+    data_spec_ids: DS_MACRO_US_CORE
     frequency: daily
     unit: pt
     cumulative_type: point_in_time
@@ -317,7 +315,7 @@ factors:
     factor_name: VKOSPI
     dimension: macro
     asset_classes: [kr_index]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: daily
     unit: pt
     cumulative_type: point_in_time
@@ -337,7 +335,7 @@ factors:
     factor_name: 유가 WTI
     dimension: macro
     asset_classes: [kr_index, us_index]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: daily
     unit: USD
     cumulative_type: point_in_time
@@ -357,7 +355,7 @@ factors:
     factor_name: 유가 Brent
     dimension: macro
     asset_classes: [kr_index, us_index]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: daily
     unit: USD
     cumulative_type: point_in_time
@@ -377,7 +375,7 @@ factors:
     factor_name: 금 가격
     dimension: macro
     asset_classes: [us_index]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: daily
     unit: USD
     cumulative_type: point_in_time
@@ -397,7 +395,7 @@ factors:
     factor_name: 주요 원자재 가격
     dimension: macro
     asset_classes: [kr_index, us_index]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: daily
     unit: index
     cumulative_type: point_in_time
@@ -417,7 +415,7 @@ factors:
     factor_name: 고객예탁금
     dimension: macro
     asset_classes: [kr_index]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: daily
     unit: KRW
     cumulative_type: point_in_time
@@ -437,7 +435,7 @@ factors:
     factor_name: 신용융자잔고
     dimension: macro
     asset_classes: [kr_index]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: daily
     unit: KRW
     cumulative_type: point_in_time
@@ -457,10 +455,10 @@ factors:
   # FLOW
   # =====================================================================
   - factor_id: FLOW_FOREIGN_SPOT
-    factor_name: 외국인 순매수(현물)
+    factor_name: 외국인 순매수
     dimension: flow
     asset_classes: [kr_equity, kr_index]
-    data_spec_id: DS_KR_MARKET_INVESTOR_FLOW
+    data_spec_ids: DS_KR_MARKET_INVESTOR_FLOW
     frequency: daily
     unit: KRW
     cumulative_type: daily
@@ -479,10 +477,10 @@ factors:
     status: active
 
   - factor_id: FLOW_INSTITUTION_SPOT
-    factor_name: 기관 순매수(현물)
+    factor_name: 기관 순매수
     dimension: flow
     asset_classes: [kr_equity, kr_index]
-    data_spec_id: DS_KR_MARKET_INVESTOR_FLOW
+    data_spec_ids: DS_KR_MARKET_INVESTOR_FLOW
     frequency: daily
     unit: KRW
     cumulative_type: daily
@@ -499,10 +497,10 @@ factors:
     status: active
 
   - factor_id: FLOW_INDIVIDUAL_SPOT
-    factor_name: 개인 순매수(현물)
+    factor_name: 개인 순매수
     dimension: flow
     asset_classes: [kr_equity, kr_index]
-    data_spec_id: DS_KR_MARKET_INVESTOR_FLOW
+    data_spec_ids: DS_KR_MARKET_INVESTOR_FLOW
     frequency: daily
     unit: KRW
     cumulative_type: daily
@@ -518,31 +516,11 @@ factors:
       - investor_type=prsn. 개인은 역지표 성격으로 해석 주의.
     status: active
 
-  - factor_id: FLOW_FUTURES_INVESTOR
-    factor_name: 선물 외국인·기관·개인 순매수
-    dimension: flow
-    asset_classes: [kr_index]
-    data_spec_id: null
-    frequency: daily
-    unit: contracts
-    cumulative_type: daily
-    transform:
-      method: rolling_sum
-      window: 5D
-    interpretation:
-      positive: 선물 외국인 순매수 확대는 지수 상방 베팅.
-      negative: 선물 외국인 순매도 확대는 헤지/하방 베팅.
-      neutral: 방향성 약하면 중립.
-    output_fields: [signal, strength, evidence, caveat]
-    caveats:
-      - 미수집 — 현 투자자 수급 API는 현물(시장/종목)만. 선물 투자자별 수급 소스 필요.
-    status: draft
-
   - factor_id: PROGRAM_NET
     factor_name: 프로그램매매 순매수
     dimension: flow
     asset_classes: [kr_equity, kr_index]
-    data_spec_id: DS_KR_MARKET_PROGRAM_TRADING
+    data_spec_ids: DS_KR_MARKET_PROGRAM_TRADING
     frequency: daily
     unit: KRW
     cumulative_type: daily
@@ -563,7 +541,7 @@ factors:
     factor_name: 선물 미결제약정 OI
     dimension: flow
     asset_classes: [kr_index]
-    data_spec_id: DS_KR_INDEX_FUTURES_BASIS
+    data_spec_ids: DS_KR_INDEX_FUTURES_BASIS
     frequency: daily
     unit: contracts
     cumulative_type: point_in_time
@@ -584,7 +562,7 @@ factors:
     factor_name: 선물 베이시스
     dimension: flow
     asset_classes: [kr_index]
-    data_spec_id: DS_KR_INDEX_FUTURES_BASIS
+    data_spec_ids: DS_KR_INDEX_FUTURES_BASIS
     frequency: daily
     unit: pt
     cumulative_type: point_in_time
@@ -601,10 +579,10 @@ factors:
     status: active
 
   - factor_id: FUTURES_BASIS_DISPARITY
-    factor_name: 이론 베이시스 대비 괴리
+    factor_name: 이론 베이시스 대비 괴리율
     dimension: flow
     asset_classes: [kr_index]
-    data_spec_id: DS_KR_INDEX_FUTURES_BASIS
+    data_spec_ids: DS_KR_INDEX_FUTURES_BASIS
     frequency: daily
     unit: percent
     cumulative_type: point_in_time
@@ -624,7 +602,7 @@ factors:
     factor_name: 차익거래 잔고
     dimension: flow
     asset_classes: [kr_index]
-    data_spec_id: DS_KR_MARKET_PROGRAM_TRADING
+    data_spec_ids: DS_KR_MARKET_PROGRAM_TRADING
     frequency: daily
     unit: KRW
     cumulative_type: cumulative
@@ -644,7 +622,7 @@ factors:
     factor_name: 비차익거래 잔고
     dimension: flow
     asset_classes: [kr_index]
-    data_spec_id: DS_KR_MARKET_PROGRAM_TRADING
+    data_spec_ids: DS_KR_MARKET_PROGRAM_TRADING
     frequency: daily
     unit: KRW
     cumulative_type: cumulative
@@ -664,7 +642,7 @@ factors:
     factor_name: 공매도 잔고
     dimension: flow
     asset_classes: [kr_equity, kr_index]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: daily
     unit: shares
     cumulative_type: point_in_time
@@ -684,7 +662,7 @@ factors:
     factor_name: 공매도 거래대금
     dimension: flow
     asset_classes: [kr_equity, kr_index]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: daily
     unit: KRW
     cumulative_type: daily
@@ -707,7 +685,7 @@ factors:
     factor_name: 업종/섹터지수 (국내)
     dimension: industry
     asset_classes: [kr_equity, kr_index]
-    data_spec_id: DS_KR_INDEX_DAILY_PRICE
+    data_spec_ids: DS_KR_INDEX_DAILY_PRICE
     frequency: daily
     unit: pt
     cumulative_type: point_in_time
@@ -727,7 +705,7 @@ factors:
     factor_name: 업종별 수익률 (국내)
     dimension: industry
     asset_classes: [kr_equity, kr_index]
-    data_spec_id: DS_KR_INDEX_DAILY_PRICE
+    data_spec_ids: DS_KR_INDEX_DAILY_PRICE
     frequency: daily
     unit: percent
     cumulative_type: daily
@@ -747,7 +725,7 @@ factors:
     factor_name: 업종별 외국인 순매수
     dimension: industry
     asset_classes: [kr_equity, kr_index]
-    data_spec_id: DS_KR_MARKET_INVESTOR_FLOW
+    data_spec_ids: DS_KR_MARKET_INVESTOR_FLOW
     frequency: daily
     unit: KRW
     cumulative_type: daily
@@ -768,7 +746,7 @@ factors:
     factor_name: 업종별 수급(종합)
     dimension: industry
     asset_classes: [kr_equity, kr_index]
-    data_spec_id: DS_KR_MARKET_INVESTOR_FLOW
+    data_spec_ids: DS_KR_MARKET_INVESTOR_FLOW
     frequency: daily
     unit: KRW
     cumulative_type: daily
@@ -788,7 +766,7 @@ factors:
     factor_name: SOX 지수(필라델피아 반도체)
     dimension: industry
     asset_classes: [kr_equity, us_equity]
-    data_spec_id: DS_MACRO_US_CORE
+    data_spec_ids: DS_MACRO_US_CORE
     frequency: daily
     unit: pt
     cumulative_type: point_in_time
@@ -808,7 +786,7 @@ factors:
     factor_name: 섹터지수 (미국)
     dimension: industry
     asset_classes: [us_equity]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: daily
     unit: pt
     cumulative_type: point_in_time
@@ -827,11 +805,11 @@ factors:
   # =====================================================================
   # VALUATION
   # =====================================================================
-  - factor_id: VAL_PER_KR_EQ
-    factor_name: PER (국내주식)
+  - factor_id: VAL_PER
+    factor_name: PER
     dimension: valuation
     asset_classes: [kr_equity]
-    data_spec_id: DS_KR_EQUITY_VALUATION
+    data_spec_ids: DS_KR_EQUITY_VALUATION
     frequency: daily
     unit: ratio
     cumulative_type: point_in_time
@@ -844,15 +822,15 @@ factors:
       neutral: 밴드 중앙이면 중립.
     output_fields: [signal, strength, evidence, caveat]
     caveats:
-      - DS_KR_EQUITY_VALUATION의 per(스냅샷). 후행 EPS 기반(선행 PER 아님).
+      - 후행 EPS 기반(선행 PER 아님).
       - 적자 종목은 PER 의미 없음(null/음수 처리).
     status: active
 
-  - factor_id: VAL_PBR_KR_EQ
-    factor_name: PBR (국내주식)
+  - factor_id: VAL_PBR
+    factor_name: PBR
     dimension: valuation
     asset_classes: [kr_equity]
-    data_spec_id: DS_KR_EQUITY_VALUATION
+    data_spec_ids: DS_KR_EQUITY_VALUATION
     frequency: daily
     unit: ratio
     cumulative_type: point_in_time
@@ -865,14 +843,14 @@ factors:
       neutral: 중앙이면 중립.
     output_fields: [signal, strength, evidence, caveat]
     caveats:
-      - DS_KR_EQUITY_VALUATION의 pbr. ROE와 결합(PBR-ROE) 해석 권장.
+      - ROE와 결합(PBR-ROE) 해석 권장.
     status: active
 
-  - factor_id: VAL_EPS_KR_EQ
-    factor_name: EPS (국내주식)
+  - factor_id: VAL_EPS
+    factor_name: EPS
     dimension: valuation
     asset_classes: [kr_equity]
-    data_spec_id: DS_KR_EQUITY_VALUATION
+    data_spec_ids: DS_KR_EQUITY_VALUATION
     frequency: daily
     unit: KRW
     cumulative_type: point_in_time
@@ -885,14 +863,14 @@ factors:
       neutral: 변화 미미하면 중립.
     output_fields: [signal, strength, evidence, caveat]
     caveats:
-      - DS_KR_EQUITY_VALUATION의 eps(후행). 컨센서스(선행 EPS) 아님.
+      - 컨센서스(선행 EPS) 아님.
     status: active
 
   - factor_id: VAL_EPS_GROWTH
     factor_name: EPS 성장률
     dimension: valuation
     asset_classes: [kr_equity, us_equity]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: quarterly
     unit: percent
     cumulative_type: point_in_time
@@ -908,51 +886,11 @@ factors:
       - 미수집 — 분기 EPS 시계열(재무) 필요. 스냅샷 eps 누적으로 근사 가능하나 정합성 낮음.
     status: draft
 
-  - factor_id: VAL_PER_GLOBAL
-    factor_name: PER (미국/지수)
-    dimension: valuation
-    asset_classes: [us_equity, kr_index, us_index]
-    data_spec_id: null
-    frequency: daily
-    unit: ratio
-    cumulative_type: point_in_time
-    transform:
-      method: z_score
-      window: 252D
-    interpretation:
-      positive: PER 밴드 하단은 저평가.
-      negative: 밴드 상단은 고평가.
-      neutral: 중앙이면 중립.
-    output_fields: [signal, strength, evidence, caveat]
-    caveats:
-      - 미수집 — 미국 개별주/지수 밸류에이션 소스 필요(국내주식 PER은 VAL_PER_KR_EQ).
-    status: draft
-
-  - factor_id: VAL_PBR_GLOBAL
-    factor_name: PBR (미국/지수)
-    dimension: valuation
-    asset_classes: [us_equity, kr_index, us_index]
-    data_spec_id: null
-    frequency: daily
-    unit: ratio
-    cumulative_type: point_in_time
-    transform:
-      method: z_score
-      window: 252D
-    interpretation:
-      positive: PBR 밴드 하단은 저평가.
-      negative: 밴드 상단은 고평가.
-      neutral: 중앙이면 중립.
-    output_fields: [signal, strength, evidence, caveat]
-    caveats:
-      - 미수집 — 미국/지수 PBR 소스 필요.
-    status: draft
-
   - factor_id: VAL_EV_EBITDA
     factor_name: EV/EBITDA
     dimension: valuation
     asset_classes: [kr_equity, us_equity]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: quarterly
     unit: ratio
     cumulative_type: point_in_time
@@ -972,7 +910,7 @@ factors:
     factor_name: ROE
     dimension: valuation
     asset_classes: [kr_equity, us_equity, kr_index, us_index]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: quarterly
     unit: percent
     cumulative_type: point_in_time
@@ -992,7 +930,7 @@ factors:
     factor_name: 영업이익률
     dimension: valuation
     asset_classes: [kr_equity, us_equity]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: quarterly
     unit: percent
     cumulative_type: point_in_time
@@ -1012,7 +950,7 @@ factors:
     factor_name: 순이익률
     dimension: valuation
     asset_classes: [kr_equity, us_equity]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: quarterly
     unit: percent
     cumulative_type: point_in_time
@@ -1032,7 +970,7 @@ factors:
     factor_name: 매출성장률
     dimension: valuation
     asset_classes: [kr_equity, us_equity]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: quarterly
     unit: percent
     cumulative_type: point_in_time
@@ -1052,7 +990,7 @@ factors:
     factor_name: 영업이익성장률
     dimension: valuation
     asset_classes: [kr_equity, us_equity]
-    data_spec_id: null
+    data_spec_ids: null
     frequency: quarterly
     unit: percent
     cumulative_type: point_in_time

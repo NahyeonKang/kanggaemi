@@ -165,25 +165,27 @@ nodes:
           description: 자산명 또는 투자기간이 모호한 경우 기록
 
     references:
-      asset_taxonomy_yaml: configs/asset_taxonomy.yaml
-      factor_catalog_yaml: configs/factor_catalog.yaml
+      asset_taxonomy_yaml: core/asset_taxonomy.yaml
+      asset_class_taxonomy_yaml: core/asset_class_taxonomy.yaml
 
     process_steps:
-      - 사용자 질문에서 자산군을 Asset Taxonomy에 맞게 작성한다.
+      - 사용자 질문에서 Asset Name을 추출한다.
+      - asset_taxonomy에 캐시되어있는 자산인지 확인한다.
+      - 캐시 O의 경우 캐시 사용
+      - 캐시 X의 경우 asset_class 분류 & asset_code(entity_code), sector, market 마스터에서 매핑 & aliases 작성 -> asset_taxonomy 업데이트
       - 투자기간을 명시/암시 표현에서 추출한다.
       - 질문 의도를 buy_or_not, outlook, timing, risk 등으로 분류한다.
-      - 자산군에 맞는 applicable_dimensions를 반환한다.
 
     failure_modes:
       - code: ASSET_NOT_FOUND
-        description: Asset Taxonomy에 없는 자산
+        description: 마스터에 entity_code 없음.
         handling: asset_code를 UNKNOWN으로 두고 user_query에서 추정 후보를 기록한다.
       - code: AMBIGUOUS_ASSET
         description: 사용자가 지칭한 자산이 여러 개로 해석될 수 있음
         handling: ambiguity.candidates에 후보를 기록하고 가장 가능성 높은 자산을 선택한다.
       - code: HORIZON_MISSING
         description: 투자기간이 명시되지 않음
-        handling: asset taxonomy의 default horizon 또는 query_intent 기준 기본값을 사용한다.
+        handling: query_intent 기준 기본값을 사용한다.
 
     retry_policy:
       max_retries: 1

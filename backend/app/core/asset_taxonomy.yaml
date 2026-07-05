@@ -7,9 +7,9 @@ updated_at: "2026-06-28"
 #
 # resolution 흐름:
 #   1) LLM이 질의에서 asset_name → (asset_class 후보, entity_code 후보, sector) 추출
-#   2) entity_code를 종목/지수/선물옵션 마스터로 grounding(환각 방지)
+#   2) asset_code, market, sector를 마스터로 grounding(환각 방지)
 #   3) 검증되면 아래 스키마로 append (resolved_by/verified_at 기록)
-#   4) dimension·data_spec은 여기 적지 않는다 → asset_class_taxonomy에서 끌어옴
+#   4) region·dimension·data_spec은 여기 적지 않는다 → asset_class_taxonomy에서 끌어옴
 #
 # 필드:
 #   asset_code  : entity_code. 반드시 문자열(따옴표) — 선행 0 보존.
