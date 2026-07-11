@@ -315,7 +315,7 @@ factors:
     factor_name: VKOSPI
     dimension: macro
     asset_classes: [kr_index]
-    data_spec_ids: null
+    data_spec_ids: DS_KR_INDEX_DAILY_PRICE
     frequency: daily
     unit: pt
     cumulative_type: point_in_time
@@ -328,8 +328,8 @@ factors:
       neutral: 평이하면 중립.
     output_fields: [signal, strength, evidence, caveat]
     caveats:
-      - 미수집 — VKOSPI 소스 필요(KRX/KIS 변동성지수).
-    status: draft
+      - DS_KR_INDEX_DAILY_PRICE 국내 업종지수에서 0503 코드로 수집
+    status: active
 
   - factor_id: CMDT_WTI
     factor_name: 유가 WTI
@@ -389,26 +389,6 @@ factors:
     output_fields: [signal, strength, evidence, caveat]
     caveats:
       - 미수집 — 금 시세 소스 필요.
-    status: draft
-
-  - factor_id: CMDT_BASKET
-    factor_name: 주요 원자재 가격
-    dimension: macro
-    asset_classes: [kr_index, us_index]
-    data_spec_ids: null
-    frequency: daily
-    unit: index
-    cumulative_type: point_in_time
-    transform:
-      method: pct_change
-      window: 20D
-    interpretation:
-      positive: 원자재 광범위 상승은 리플레이션/비용 압력.
-      negative: 원자재 하락은 디스인플레이션/수요둔화.
-      neutral: 혼조면 중립.
-    output_fields: [signal, strength, evidence, caveat]
-    caveats:
-      - 미수집 — 원자재 종합지수(예 GSCI/BCOM) 소스 필요. 구성 정의 필요.
     status: draft
 
   - factor_id: LIQ_DEPOSIT
@@ -681,87 +661,6 @@ factors:
   # =====================================================================
   # INDUSTRY
   # =====================================================================
-  - factor_id: SECTOR_INDEX_KR
-    factor_name: 업종/섹터지수 (국내)
-    dimension: industry
-    asset_classes: [kr_equity, kr_index]
-    data_spec_ids: DS_KR_INDEX_DAILY_PRICE
-    frequency: daily
-    unit: pt
-    cumulative_type: point_in_time
-    transform:
-      method: z_score
-      window: 60D
-    interpretation:
-      positive: 해당 업종지수 강세는 섹터 모멘텀 우위.
-      negative: 업종지수 약세는 섹터 모멘텀 열위.
-      neutral: 횡보면 중립.
-    output_fields: [signal, strength, evidence, caveat]
-    caveats:
-      - entity_code=업종코드. 종목 분석 시 소속 업종 매핑 필요.
-    status: active
-
-  - factor_id: SECTOR_RETURN_KR
-    factor_name: 업종별 수익률 (국내)
-    dimension: industry
-    asset_classes: [kr_equity, kr_index]
-    data_spec_ids: DS_KR_INDEX_DAILY_PRICE
-    frequency: daily
-    unit: percent
-    cumulative_type: daily
-    transform:
-      method: pct_change
-      window: 20D
-    interpretation:
-      positive: 업종 수익률 상위는 상대강도(RS) 우위.
-      negative: 하위 업종은 상대약세.
-      neutral: 시장 평균 수준이면 중립.
-    output_fields: [signal, strength, evidence, caveat]
-    caveats:
-      - DS_KR_INDEX_DAILY_PRICE close의 변화율. 업종 간 상대비교(cross-sectional rank) 권장.
-    status: active
-
-  - factor_id: SECTOR_FOREIGN_NETBUY
-    factor_name: 업종별 외국인 순매수
-    dimension: industry
-    asset_classes: [kr_equity, kr_index]
-    data_spec_ids: DS_KR_MARKET_INVESTOR_FLOW
-    frequency: daily
-    unit: KRW
-    cumulative_type: daily
-    transform:
-      method: rolling_sum
-      window: 5D
-    interpretation:
-      positive: 특정 업종 외국인 순매수 집중은 섹터 로테이션 유입.
-      negative: 업종 외국인 순매도는 섹터 이탈.
-      neutral: 방향성 약하면 중립.
-    output_fields: [signal, strength, evidence, caveat]
-    caveats:
-      - DS_KR_MARKET_INVESTOR_FLOW의 sector_code(업종)로 조회. 0001=전체.
-      - investor_type=frgn. 당일분 가집계.
-    status: active
-
-  - factor_id: SECTOR_FLOW
-    factor_name: 업종별 수급(종합)
-    dimension: industry
-    asset_classes: [kr_equity, kr_index]
-    data_spec_ids: DS_KR_MARKET_INVESTOR_FLOW
-    frequency: daily
-    unit: KRW
-    cumulative_type: daily
-    transform:
-      method: rolling_sum
-      window: 5D
-    interpretation:
-      positive: 업종에 외국인·기관 동반 순매수면 강한 섹터 수급.
-      negative: 동반 순매도면 섹터 수급 이탈.
-      neutral: 혼조면 중립.
-    output_fields: [signal, strength, evidence, caveat]
-    caveats:
-      - sector_code별 frgn+orgn 합산. 개인은 역지표로 분리 해석.
-    status: active
-
   - factor_id: SOX_INDEX
     factor_name: SOX 지수(필라델피아 반도체)
     dimension: industry
@@ -781,26 +680,6 @@ factors:
     caveats:
       - DS_MACRO_US_CORE series_id=NASDAQSOX. 국내 반도체 대형주와 상관 높음.
     status: active
-
-  - factor_id: SECTOR_INDEX_US
-    factor_name: 섹터지수 (미국)
-    dimension: industry
-    asset_classes: [us_equity]
-    data_spec_ids: null
-    frequency: daily
-    unit: pt
-    cumulative_type: point_in_time
-    transform:
-      method: pct_change
-      window: 20D
-    interpretation:
-      positive: 미국 섹터지수 강세는 해당 섹터 글로벌 모멘텀.
-      negative: 약세는 섹터 부담.
-      neutral: 횡보면 중립.
-    output_fields: [signal, strength, evidence, caveat]
-    caveats:
-      - 미수집 — 미국 섹터 ETF/지수(GICS 섹터) 소스 필요.
-    status: draft
 
   # =====================================================================
   # VALUATION

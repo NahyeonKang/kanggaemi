@@ -53,9 +53,6 @@ PROPERTY_MAPPING: dict[str, tuple[str, str, list[str]]] = {
     "data_spec_id": ("data_spec_id", "title", ["data_spec_id", "data spec id", "dataspecid"]),
     "name": ("name", "rich_text", ["name"]),
     "provider": ("source.provider", "select", ["provider"]),
-    "asset_classes": ("coverage.asset_classes", "multi_select", ["asset_classes", "asset classes", "assetclasses"]),
-    "markets": ("coverage.markets", "multi_select", ["markets"]),
-    "regions": ("coverage.regions", "multi_select", ["regions"]),
     "dimensions": ("usage.dimensions", "multi_select", ["dimensions"]),
     "related_factors": ("usage.related_factors", "multi_select", ["related_factors", "related factors", "relatedfactors"]),
     "frequency": ("data_contract.frequency", "select", ["frequency"]),
@@ -248,7 +245,6 @@ def build_page_children(spec: dict[str, Any]) -> list[dict[str, Any]]:
 
     append_text_section(children, "Description", spec.get("description", ""))
     append_yaml_section(children, "Source", spec.get("source", {}))
-    append_yaml_section(children, "Coverage", spec.get("coverage", {}))
     append_yaml_section(children, "Usage", spec.get("usage", {}))
     append_yaml_section(children, "Params", spec.get("params", {}))
     append_yaml_section(children, "Data Contract", spec.get("data_contract", {}))

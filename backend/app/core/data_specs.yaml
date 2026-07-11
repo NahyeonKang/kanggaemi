@@ -595,7 +595,7 @@ data_specs:
 
     usage:
       dimensions: [macro, industry]
-      related_factors: [MACRO_DOLLAR_INDEX, RATE_US_BEI_10Y, RATE_US_REAL_10Y, VOL_VIX, SOX_INDEX]
+      related_factors: [MACRO_DOLLAR_INDEX, RATE_US_BEI_10Y, RATE_US_REAL_10Y, RATE_FED_FUNDS, VOL_VIX, SOX_INDEX]
 
     params:
       required:
@@ -603,7 +603,7 @@ data_specs:
           type: string
           example: "VIXCLS"
           default: null
-          description: DTWEXBGS|T10YIE|DFII10|NASDAQSOX|VIXCLS
+          description: DTWEXBGS|T10YIE|DFII10|NASDAQSOX|VIXCLS|FEDFUNDS
         - name: start_date
           type: string
           example: "2026-06-01"
@@ -1512,8 +1512,8 @@ data_specs:
       auth_required: true
 
     usage:
-      dimensions: [flow, industry]
-      related_factors: [FLOW_OPEN, FLOW_HIGH, FLOW_LOW, FLOW_CLOSE, FLOW_VOLUME, FLOW_AMOUNT]
+      dimensions: [flow, industry, macro]
+      related_factors: [FLOW_OPEN, FLOW_HIGH, FLOW_LOW, FLOW_CLOSE, FLOW_VOLUME, FLOW_AMOUNT, VOL_VKOSPI]
 
     params:
       required:
