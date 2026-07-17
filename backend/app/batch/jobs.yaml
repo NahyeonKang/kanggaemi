@@ -2,6 +2,7 @@ version: "1.0"
 timezone: Asia/Seoul
 
 defaults:
+  kis_token_min_interval_seconds: 65
   retry:
     max_attempts: 3
     initial_delay_seconds: 1
@@ -12,6 +13,12 @@ jobs:
   universe-refresh:
     schedule: "weekly Sunday 05:00 Asia/Seoul"
     handler: universe_refresh
+    uses_kis: true
+    retry:
+      initial_delay_seconds: 65
+      multiplier: 2
+      max_delay_seconds: 130
+      jitter_fraction: 0
     div_cls_code: "1"
     markets:
       kospi:
@@ -22,9 +29,179 @@ jobs:
   stock-prices:
     schedule: "daily 05:00 Asia/Seoul"
     handler: stock_prices
+    uses_kis: true
+    retry:
+      initial_delay_seconds: 65
+      multiplier: 2
+      max_delay_seconds: 130
+      jitter_fraction: 0
     depends_on: [universe-refresh]
     universe_job: universe-refresh
     target_source: latest_universe_membership
     asset_class: stock
     period: D
     adj: "0"
+
+  futures-master-refresh:
+    schedule: "weekly Sunday 05:00 Asia/Seoul"
+    handler: futures_master_refresh
+    targets:
+      overseas:
+        module: scripts.load_overseas_future_master
+        args: [--download, --dir, scripts/_master]
+      domestic:
+        module: scripts.load_domestic_derivative_master
+        args: [--download, --market, idx, --dir, scripts/_master]
+
+  active-contract-refresh:
+    schedule: "daily 05:00 Asia/Seoul"
+    handler: active_contract_refresh
+    uses_kis: true
+    depends_on: [futures-master-refresh]
+    retry:
+      initial_delay_seconds: 65
+      multiplier: 2
+      max_delay_seconds: 130
+      jitter_fraction: 0
+    overseas:
+      WTI:
+        product_code: WBS
+      BRENT:
+        product_code: BZ
+      GOLD:
+        product_code: GC
+      COPPER:
+        product_code: HG
+      NATURALGAS:
+        product_code: NG
+    domestic:
+      KOSPI200:
+        underlying_cd: "2001"
+        market_type: idx
+        candidate_count: 3
+        lookback_days: 14
+        rollover_business_days: 3
+
+  futures-sync:
+    schedule: "daily 05:00 Asia/Seoul"
+    handler: futures_sync
+    uses_kis: true
+    depends_on: [active-contract-refresh]
+    contract_job: active-contract-refresh
+    retry: &kis_retry
+      initial_delay_seconds: 65
+      multiplier: 2
+      max_delay_seconds: 130
+      jitter_fraction: 0
+    period: D
+    adj: "0"
+    overseas_qry_cnt: 40
+    overseas_max_pages: 25
+    skip_entitlement_error_codes: [EGW00551, EGW00553]
+    skip_entitlement_message_markers: ["SUB거래소 신청 계좌가 아닙니다"]
+
+  market-indices:
+    schedule: "daily 05:00 Asia/Seoul"
+    handler: market_level
+    uses_kis: true
+    operation: index_chart
+    retry: *kis_retry
+    period: D
+    adj: "0"
+    targets:
+      KOSPI: {entity_code: "0001"}
+      KOSDAQ: {entity_code: "11001"}
+      KOSPI200: {entity_code: "2001"}
+      VKOSPI: {entity_code: "0503"}
+
+  market-investor-flow:
+    schedule: "daily 05:00 Asia/Seoul"
+    handler: market_level
+    uses_kis: true
+    operation: market_investor_flow
+    retry: *kis_retry
+    targets:
+      KOSPI: {market: KOSPI, sector_code: "0001"}
+      KOSDAQ: {market: KOSDAQ, sector_code: "0001"}
+
+  market-program-trade:
+    schedule: "daily 05:00 Asia/Seoul"
+    handler: market_level
+    uses_kis: true
+    operation: market_program_trade
+    retry: *kis_retry
+    targets:
+      KOSPI: {market: KOSPI}
+      KOSDAQ: {market: KOSDAQ}
+
+  market-funds:
+    schedule: "daily 05:00 Asia/Seoul"
+    handler: market_level
+    uses_kis: true
+    operation: market_funds
+    retry: *kis_retry
+    targets:
+      KR_MARKET: {}
+
+  macro-indicators:
+    schedule: "daily 05:00 Asia/Seoul"
+    handler: market_level
+    operation: macro_core
+    targets:
+      FRED_CORE: {}
+
+  yield-rates:
+    schedule: "daily 05:00 Asia/Seoul"
+    handler: market_level
+    operation: yield_daily
+    targets:
+      US_SOFR: {country: US, tenor: SOFR}
+      US_2Y: {country: US, tenor: 2Y}
+      US_10Y: {country: US, tenor: 10Y}
+      US_30Y: {country: US, tenor: 30Y}
+      KR_KOFR: {country: KR, tenor: KOFR}
+      KR_3Y: {country: KR, tenor: 3Y}
+      KR_10Y: {country: KR, tenor: 10Y}
+      KR_30Y: {country: KR, tenor: 30Y}
+      KR_CD91: {country: KR, tenor: CD91}
+      KR_CORP3Y_AA: {country: KR, tenor: CORP3Y_AA}
+
+  exchange-rates:
+    schedule: "daily 05:00 Asia/Seoul"
+    handler: market_level
+    operation: exchange_rates
+    daily_lookback_days: 14
+    targets:
+      USDKRW_DAILY: {kind: daily}
+
+  stock-financials:
+    schedule: "weekly Sunday 05:00 Asia/Seoul"
+    handler: stock_details
+    uses_kis: true
+    operation: financials
+    retry: *kis_retry
+    depends_on: [universe-refresh]
+    universe_job: universe-refresh
+    target_source: latest_universe_membership
+    div_cls_codes: ["0", "1"]
+
+  stock-investor-flow:
+    schedule: "daily 05:00 Asia/Seoul"
+    handler: stock_details
+    uses_kis: true
+    operation: investor_flow
+    retry: *kis_retry
+    depends_on: [universe-refresh]
+    universe_job: universe-refresh
+    target_source: latest_universe_membership
+    skip_time_limit_error_codes: [OPSQ2001]
+
+  stock-program-trade:
+    schedule: "daily 05:00 Asia/Seoul"
+    handler: stock_details
+    uses_kis: true
+    operation: program_trade
+    retry: *kis_retry
+    depends_on: [universe-refresh]
+    universe_job: universe-refresh
+    target_source: latest_universe_membership

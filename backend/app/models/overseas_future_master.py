@@ -17,7 +17,7 @@ from app.db.base import Base
 class OverseasFutureMasterModel(Base):
     __tablename__ = "overseas_future_master"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     srs_cd = Column(String(32), nullable=False)            # 종목코드 (예: 6AM24)
     exch_cd = Column(String(16))                           # 거래소코드 (예: CME)
     product_code = Column(String(16))                      # 품목코드 (예: 6A)
@@ -30,6 +30,10 @@ class OverseasFutureMasterModel(Base):
     contract_size = Column(String(24))
     price_base = Column(String(8))                         # 가격표시진법
     mult = Column(String(16))                              # 환산승수
+    most_active_flag = Column(String(1))                  # 최다월물여부 0|1
+    nearest_flag = Column(String(1))                      # 최근월물여부 0|1
+    spread_flag = Column(String(1))                       # 스프레드여부
+    spread_leg1_flag = Column(String(1))                  # 스프레드 기준종목 LEG1 여부
     sub_exch_cd = Column(String(8))
     currency = Column(String(8))                           # ffcode.mst 외부에서 주입
     updated_at = Column(DateTime(timezone=True), nullable=False)

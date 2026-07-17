@@ -1,5 +1,5 @@
-version: "0.1.0"
-updated_at: "2026-06-28"
+version: "0.2.0"
+updated_at: "2026-07-18"
 project: Investment Strategy Report Agent
 description: 노드별 역할, 입력, 출력, 실패 처리, 평가 기준을 정의한다.
 
@@ -23,6 +23,7 @@ conventions:
     - mixed
     - unknown
   confidence_range: "0.0 to 1.0"
+  max_synthesis_revisions: 2
   supported_dimensions:
     - macro
     - flow
@@ -73,6 +74,44 @@ global_output_contract:
   final_report:
     type: string
     description: 최종 투자전망 및 투자전략 보고서
+
+data_access_contract:
+  via: feature_engine
+  mode: as_of                 # point-in-time. 원시 API 재호출 금지 (ADR-0015)
+  lookahead: forbidden
+  note: 분석 노드는 데이터를 직접 수집하지 않고 feature_engine 이 data_specs 기준 as_of_date 로 조회·transform 한 결과를 사용한다.
+  fetch_on_miss:
+    description: 종목 데이터는 시총상위 유니버스만 상시 적재된다. 질의 종목이 유니버스 밖이라 DB에 없거나 히스토리가 부족하면 feature_engine 이 해당 도메인 sync 를 1회 트리거(시세는 ~1년 백필)한 뒤 진행하고, 이후 캐시처럼 재사용한다. 원시 API 상시 폴링은 하지 않는다.
+
+evidence_contract:
+  required:
+    - data_spec_id
+    - source
+    - entity_code
+    - field
+    - value
+    - unit
+    - observation_date
+    - as_of_date
+    - transform
+    - is_estimated
+    - caveats
+  fields:
+    data_spec_id: {type: string}
+    source: {type: string}
+    entity_code: {type: string}
+    field: {type: string}
+    value: {type: float}
+    unit: {type: string}
+    observation_date: {type: date}
+    as_of_date: {type: date}
+    transform:
+      type: object
+      fields:
+        method: string
+        window: string
+    is_estimated: {type: boolean}
+    caveats: {type: array}
 
 nodes:
   - node_id: classify_node
@@ -169,13 +208,15 @@ nodes:
       asset_class_taxonomy_yaml: core/asset_class_taxonomy.yaml
 
     process_steps:
-      - 사용자 질문에서 Asset Name을 추출한다.
-      - asset_taxonomy에 캐시되어있는 자산인지 확인한다.
-      - 캐시 O의 경우 캐시 사용
-      - 캐시 X의 경우 asset_class 분류 & asset_code(entity_code), sector, market 마스터에서 매핑 & aliases 작성 -> asset_taxonomy 업데이트
-      - applicable_dimensions는 asset_class_taxonomy의 applicable_dimensions 사용
-      - 투자기간을 명시/암시 표현에서 추출한다. 없을 경우 asset_class_taxonomy의 default_horizon 사용
-      - 질문 의도를 buy_or_not, outlook, timing, risk 등으로 분류한다.
+      - LLM이 사용자 질문에서 asset_name을 추출한다.
+      - asset_taxonomy(인스턴스 캐시)에 해당 자산이 있는지 확인한다.
+      - "캐시 히트: 캐시된 asset_class/entity_code/region/sector/market/aliases를 사용한다."
+      - "캐시 미스(1): asset_class_taxonomy에서 asset_class를 분류하고 region을 매핑한다."
+      - "캐시 미스(2): entity_code(asset_code)/sector/market을 종목마스터에서 grounding한다(LLM 생성 금지)."
+      - "캐시 미스(3): aliases를 작성해 asset_taxonomy에 append한다(다음부터 캐시 히트)."
+      - applicable_dimensions는 asset_class_taxonomy의 값을 사용한다.
+      - "투자기간을 명시/암시 표현에서 추출하고, 없으면 asset_class_taxonomy.default_horizon을 사용한다."
+      - query_intent를 output_schema.query_intent enum으로 분류한다.
 
     failure_modes:
       - code: ASSET_NOT_FOUND
@@ -198,7 +239,7 @@ nodes:
       - asset_code가 Asset Taxonomy에 존재해야 한다.
       - asset_class가 비어 있으면 안 된다.
       - horizon이 supported_horizons 중 하나여야 한다.
-      - applicable_dimensions가 최소 2개 이상이어야 한다.
+      - applicable_dimensions가 최소 1개 이상이어야 한다. (fx 등 단일 차원 자산 존재)
 
     prompt_guidelines:
       - 사용자의 표현을 임의로 과도하게 해석하지 않는다.
@@ -285,9 +326,9 @@ nodes:
           type: float
 
     references:
-      asset_taxonomy_yaml: configs/asset_taxonomy.yaml
-      factor_catalog_yaml: configs/factor_catalog.yaml
-      data_specs_yaml: configs/data_specs.yaml
+      asset_taxonomy_yaml: core/asset_taxonomy.yaml
+      factor_catalog_yaml: core/factor_catalog.yaml
+      data_specs_yaml: core/data_specs.yaml
 
     process_steps:
       - asset_class와 applicable_dimensions를 기준으로 factor 후보를 조회한다.
@@ -295,13 +336,15 @@ nodes:
       - 실행할 노드 순서를 결정한다.
 
     factor_selection_rules:
-      - asset_class가 KR Equity이면 macro, flow, industry, valuation를 우선 고려한다.
-      - asset_class가 KR Index이면 macro, flow, valuation를 우선 고려한다.
-      - asset_class가 FX이면 macro를 우선 고려한다.
-      - horizon이 1M 이하이면 flow의 가중치를 높인다.
-      - horizon이 1Y 이상이면 macro, industry, valuation의 가중치를 높인다.
-      - 사용자가 "지금 사도 될까"라고 물으면 valuation, flow을 포함한다.
-      - 사용자가 "장기 전망"을 물으면 macro, industry, valuation를 포함한다.
+      - "macro는 모든 asset_class에 backdrop으로 항상 포함한다(applicable_dimensions와 무관). flow/industry/valuation은 classify의 applicable_dimensions로 게이팅한다."
+      - "asset_class=kr_equity: flow, industry, valuation (+ macro backdrop)."
+      - "asset_class=kr_index: flow, valuation (+ macro backdrop). industry는 미적용."
+      - "asset_class=fx / commodity: macro 중심."
+      - "factor_catalog에서 status=active인 factor만 선정한다. draft(data_spec_id 없음)는 소스 미구현으로 제외하고 skipped reason을 남긴다."
+      - horizon이 1M 이하이면 flow 가중치를 높인다.
+      - horizon이 1Y 이상이면 macro, industry, valuation 가중치를 높인다.
+      - "query_intent=buy_or_not/short_term_timing이면 valuation, flow를 포함한다."
+      - "query_intent=long_term_outlook/general_outlook이면 macro, industry, valuation을 포함한다."
 
     failure_modes:
       - code: NO_FACTOR_FOUND
@@ -400,20 +443,18 @@ nodes:
         missing_data:
           type: array
 
-    expected_data_specs:
-      - DS_FX_USDKRW
-      - DS_RATE_KR_TREASURY
-      - DS_RATE_US_TREASURY
-      - DS_US_DOLLAR_INDEX
-      - DS_VOLATILITY_VIX
-      - DS_VOLATILITY_VKOSPI
-      - DS_COMMODITY_WTI
-      - DS_COMMODITY_BRENT
-      - DS_COMMODITY_GOLD
+    expected_data_specs:              # 실제 data_specs.yaml 기준
+      - DS_FX_USDKRW_DAILY            # 환율
+      - DS_RATE_KR_TREASURY           # 한국 국채금리
+      - DS_RATE_US_TREASURY           # 미국 국채금리
+      - DS_MACRO_US_CORE              # 달러인덱스/VIX/SOX/실질금리/BEI (필드로 포함)
+      - DS_KR_MARKET_FUNDS            # 유동성(예탁금/신용융자)
+      - DS_OVERSEAS_FUTURES_DAILY     # 원자재(WTI/BRENT/GOLD/COPPER/NATURALGAS)
+      - DS_KR_INDEX_DAILY_PRICE       # VKOSPI (지수, entity_code 0503)
 
     process_steps:
       - 자산군에 필요한 macro factor를 확인한다.
-      - 금리, 환율, 유동성, 변동성, 원자재 데이터를 수집한다.
+      - 금리, 환율, 유동성, 변동성, 원자재 데이터를 feature engine as_of로 조회한다(원시 재호출 금지).
       - 각 지표의 방향성과 자산 가격 민감도를 평가한다.
       - 단기 충격과 중장기 추세를 구분한다.
       - macro 환경이 해당 자산에 우호적인지 판단한다.
@@ -534,12 +575,12 @@ nodes:
           type: array
 
     expected_data_specs:
-      - DS_KR_EQUITY_INVESTOR_FLOW
-      - DS_KR_INDEX_INVESTOR_FLOW
-      - DS_KR_INDEX_FUTURES
-      - DS_KR_INDEX_FUTURES_BASIS
-      - DS_KR_INDEX_PROGRAM_TRADING
-      - DS_ETF_FLOW
+      - DS_KR_EQUITY_INVESTOR_FLOW    # 종목 수급
+      - DS_KR_MARKET_INVESTOR_FLOW    # 시장 수급
+      - DS_KR_EQUITY_PROGRAM_TRADING  # 종목 프로그램매매
+      - DS_KR_MARKET_PROGRAM_TRADING  # 시장 프로그램매매
+      - DS_KR_INDEX_FUTURES           # 지수선물(포지셔닝)
+      - DS_KR_INDEX_FUTURES_BASIS     # 베이시스/미결제약정
 
     process_steps:
       - 투자자별 순매수 데이터를 확인한다.
@@ -659,11 +700,15 @@ nodes:
           type: array
 
     expected_data_specs:
-      - DS_INDUSTRY_SECTOR_PERFORMANCE
-      - DS_INDUSTRY_PEER_VALUATION
-      - DS_INDUSTRY_SEMICONDUCTOR_PRICE
-      - DS_INDUSTRY_EXPORTS
-      - DS_INDUSTRY_NEWS
+      - DS_KR_INDEX_DAILY_PRICE       # 업종지수 수익률/상대성과
+      - DS_MACRO_US_CORE              # SOX(반도체 업황 대리)
+      - DS_KR_EQUITY_VALUATION        # 피어 밸류에이션(PER/PBR)
+      - DS_KR_EQUITY_FINANCIALS       # 피어 재무(ROE/마진/성장)
+    planned_data_specs:               # 미수집 → draft로 취급
+      - DS_INDUSTRY_PEER_PRICE        # 피어 주가/상대강도
+      - DS_INDUSTRY_SEMICONDUCTOR_PRICE  # 메모리·HBM 가격
+      - DS_INDUSTRY_EXPORTS           # 수출 통계
+      - DS_INDUSTRY_NEWS              # 업종 뉴스/이벤트
 
     process_steps:
       - 자산의 sector를 확인한다.
@@ -783,11 +828,12 @@ nodes:
           type: array
 
     expected_data_specs:
-      - DS_VALUATION_PER_PBR
-      - DS_VALUATION_FORWARD_EPS
-      - DS_VALUATION_EPS_REVISION
-      - DS_VALUATION_PEER_MULTIPLES
-      - DS_VALUATION_HISTORICAL_BAND
+      - DS_KR_EQUITY_VALUATION        # PER/PBR (EPS는 여기서 제거됨)
+      - DS_KR_EQUITY_FINANCIALS       # EPS/ROE/성장률/마진/EV_EBITDA
+      - DS_KR_EQUITY_DAILY_PRICE      # 역사적 밴드(가격×valuation 파생)
+    planned_data_specs:               # 미수집 → draft로 취급
+      - DS_VALUATION_FORWARD_EPS      # 컨센서스 forward EPS
+      - DS_VALUATION_EPS_REVISION     # EPS 리비전
 
     process_steps:
       - 현재 valuation level을 확인한다.
@@ -855,6 +901,8 @@ nodes:
         - dimension_results
       optional:
         - user_profile
+        - revision_count
+        - evaluation_feedback
       fields:
         user_query:
           type: string
@@ -864,7 +912,7 @@ nodes:
           type: object
         dimension_results:
           type: object
-          description: issue, macro, flow, industry, valuation, technical, risk 분석 결과
+          description: macro, flow, industry, valuation 분석 결과(적용된 차원만)
         user_profile:
           type: object
 
@@ -980,6 +1028,7 @@ nodes:
       - synthesize_node
     downstream_nodes:
       - report_formatter_node
+      - synthesize_node   # 평가 미통과 & revision 여유 시 재작성 요청
 
     input_schema:
       required:
@@ -1095,7 +1144,7 @@ nodes:
 
   - node_id: report_formatter_node
     node_name: Report Formatter Node
-    status: draft
+    status: active
     node_type: formatter
     stage: 6
     owner_dimension: formatting
@@ -1194,8 +1243,13 @@ execution_graph:
       to: synthesize_node
     - from: synthesize_node
       to: evaluate_node
+  conditional_edges:
     - from: evaluate_node
+      condition: "passed == true OR revision_count >= max_synthesis_revisions"
       to: report_formatter_node
+    - from: evaluate_node
+      condition: "passed == false AND revision_count < max_synthesis_revisions"
+      to: synthesize_node
 
 notion_mapping:
   database_name: "03. Node Specs"
@@ -1222,7 +1276,7 @@ notion_mapping:
     - Prompt Guidelines
 
 sync_policy:
-  source_of_truth: configs/node_specs.yaml
+  source_of_truth: core/node_specs.yaml
   notion_update_mode: upsert
   unique_key: node_id
   deprecated_handling: mark_as_deprecated

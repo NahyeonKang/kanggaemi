@@ -9,6 +9,7 @@ from typing import Sequence
 from app.batch.config import load_batch_config, retry_policy
 from app.batch.lock import JobAlreadyRunningError, JobLock
 from app.batch.logging import configure_json_logging
+from app.batch.kis_token_throttle import KisTokenThrottle
 from app.batch.registry import resolve_handler
 from app.batch.types import JobContext
 from app.db.session import engine
@@ -65,13 +66,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = handler(context)
         else:
             with JobLock(args.job_name, engine, os.getenv("BATCH_LOCK_DIR")):
+                if bool(job_config.get("uses_kis", False)):
+                    min_interval = float(
+                        config.get("defaults", {}).get(
+                            "kis_token_min_interval_seconds", 65
+                        )
+                    )
+                    KisTokenThrottle().reserve(args.job_name, min_interval)
                 result = handler(context)
         logger.info(
             "job_finished",
             extra={
                 "event": "job_finished", "job": args.job_name, "success": result.success,
                 "target_count": len(result.targets), "succeeded": result.succeeded,
-                "failed": result.failed,
+                "skipped": result.skipped, "failed": result.failed,
             },
         )
         return EXIT_SUCCESS if result.success else EXIT_JOB_FAILED

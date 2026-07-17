@@ -11,6 +11,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.overseas_future_master import OverseasFutureMasterModel
@@ -21,7 +22,8 @@ logger = logging.getLogger(__name__)
 _FIELDS = (
     "exch_cd", "product_code", "product_type", "name", "disp_decimal",
     "calc_decimal", "tick_size", "tick_value", "contract_size",
-    "price_base", "mult", "sub_exch_cd",
+    "price_base", "mult", "most_active_flag", "nearest_flag",
+    "spread_flag", "spread_leg1_flag", "sub_exch_cd",
 )
 
 
@@ -38,6 +40,24 @@ class OverseasFutureMasterRepository:
     ) -> int:
         """currency_map: {srs_cd 또는 exch_cd: currency} 선택 주입."""
         now = _utcnow()
+        # A disappeared contract must not retain last week's active flags.
+        (
+            db.query(OverseasFutureMasterModel)
+            .filter(
+                or_(
+                    OverseasFutureMasterModel.most_active_flag == "1",
+                    OverseasFutureMasterModel.nearest_flag == "1",
+                )
+            )
+            .update(
+                {
+                    OverseasFutureMasterModel.most_active_flag: None,
+                    OverseasFutureMasterModel.nearest_flag: None,
+                    OverseasFutureMasterModel.updated_at: now,
+                },
+                synchronize_session=False,
+            )
+        )
         affected = 0
         for it in items:
             if not it.srs_cd:
@@ -59,8 +79,9 @@ class OverseasFutureMasterRepository:
                 if changed:
                     for k, v in values.items():
                         setattr(existing, k, v)
-                    existing.updated_at = now
                     affected += 1
+                # updated_at is also the full-master load generation marker.
+                existing.updated_at = now
             else:
                 db.add(OverseasFutureMasterModel(srs_cd=it.srs_cd, updated_at=now, **values))
                 affected += 1
@@ -95,6 +116,41 @@ class OverseasFutureMasterRepository:
     def resolve_currency(self, db: Session, srs_cd: str) -> Optional[str]:
         row = self.get_by_srs(db, srs_cd)
         return row.currency if row is not None else None
+
+    def resolve_active_contract(
+        self, db: Session, product_code: str
+    ) -> Optional[OverseasFutureMasterModel]:
+        """Resolve an outright contract: most-active first, nearest as fallback."""
+        rows = (
+            db.query(OverseasFutureMasterModel)
+            .filter_by(product_code=product_code)
+            .all()
+        )
+        if rows:
+            latest_generation = max(row.updated_at for row in rows)
+            rows = [row for row in rows if row.updated_at == latest_generation]
+        outright = [row for row in rows if "-" not in row.srs_cd]
+        most_active = sorted(
+            (row for row in outright if row.most_active_flag == "1"),
+            key=lambda row: row.srs_cd,
+        )
+        if len(most_active) > 1:
+            raise RuntimeError(
+                f"multiple most-active contracts for {product_code}: "
+                f"{[row.srs_cd for row in most_active]}"
+            )
+        if most_active:
+            return most_active[0]
+        nearest = sorted(
+            (row for row in outright if row.nearest_flag == "1"),
+            key=lambda row: row.srs_cd,
+        )
+        if len(nearest) > 1:
+            raise RuntimeError(
+                f"multiple nearest contracts for {product_code}: "
+                f"{[row.srs_cd for row in nearest]}"
+            )
+        return nearest[0] if nearest else None
 
 
 def _product_prefix(srs_cd: str) -> Optional[str]:

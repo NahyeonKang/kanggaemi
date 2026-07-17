@@ -2,20 +2,14 @@ from __future__ import annotations
 
 from app.batch.dates import normalize_yyyymmdd
 from app.batch.retry import run_targets
+from app.batch.targets import latest_universe_tickers
 from app.batch.types import JobContext, JobResult, TargetResult
 from app.db.session import SessionLocal
-from app.repositories.universe_membership_repository import UniverseMembershipRepository
 from app.services.instrument_price_service import InstrumentPriceService
 
 
 def run_stock_prices(context: JobContext) -> JobResult:
-    universe_job_name = str(context.config["universe_job"])
-    universe_config = context.batch_config["jobs"][universe_job_name]
-    expected_counts = {
-        market: int(values["top_n"])
-        for market, values in universe_config["markets"].items()
-    }
-    targets = context.targets or _latest_tickers(expected_counts)
+    targets = context.targets or latest_universe_tickers(context)
     targets = list(dict.fromkeys(targets))
     if not targets:
         raise RuntimeError("no stock targets; run universe-refresh first or pass --targets")
@@ -55,8 +49,3 @@ def run_stock_prices(context: JobContext) -> JobResult:
         job_name=context.job_name,
         targets=run_targets(context.job_name, targets, sync_ticker, context.retry_policy),
     )
-
-
-def _latest_tickers(expected_counts: dict[str, int]) -> list[str]:
-    with SessionLocal() as db:
-        return UniverseMembershipRepository().get_latest_tickers(db, expected_counts)

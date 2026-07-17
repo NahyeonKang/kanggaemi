@@ -14,4 +14,7 @@ sqlalchemy
 holidays
 psycopg2-binary
 PyYAML
+langgraph
+langgraph-checkpoint-postgres
+psycopg[binary]
 tzdata; platform_system == "Windows"

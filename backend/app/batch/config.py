@@ -27,5 +27,5 @@ def retry_policy(config: dict[str, Any], job_config: dict[str, Any]) -> RetryPol
         initial_delay_seconds=float(values.get("initial_delay_seconds", 1)),
         multiplier=float(values.get("multiplier", 2)),
         max_delay_seconds=float(values.get("max_delay_seconds", 30)),
+        jitter_fraction=float(values.get("jitter_fraction", 0.5)),
     )
-

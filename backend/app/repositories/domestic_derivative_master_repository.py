@@ -49,8 +49,9 @@ class DomesticDerivativeMasterRepository:
                 if any(getattr(existing, k) != v for k, v in values.items()):
                     for k, v in values.items():
                         setattr(existing, k, v)
-                    existing.updated_at = now
                     affected += 1
+                # updated_at is also the full-master load generation marker.
+                existing.updated_at = now
             else:
                 db.add(DomesticDerivativeMasterModel(
                     market_type=it.market_type, srs_cd=it.srs_cd,
@@ -74,6 +75,9 @@ class DomesticDerivativeMasterRepository:
             .filter_by(market_type=market_type, underlying_cd=underlying_cd)
             .all()
         )
+        if rows:
+            latest_generation = max(row.updated_at for row in rows)
+            rows = [row for row in rows if row.updated_at == latest_generation]
         return [r for r in rows if _is_future(r.product_type)]
 
     def get_by_srs(
@@ -90,4 +94,6 @@ def _is_future(product_type: Optional[str]) -> bool:
     if not product_type:
         return False
     pt = product_type.strip().lower()
+    if pt == "1":
+        return True
     return any(h.lower() in pt for h in _FUTURE_HINTS)

@@ -10,6 +10,7 @@ class RetryPolicy:
     initial_delay_seconds: float = 1.0
     multiplier: float = 2.0
     max_delay_seconds: float = 30.0
+    jitter_fraction: float = 0.5
 
 
 @dataclass
@@ -19,6 +20,19 @@ class TargetResult:
     attempts: int
     output: Any = None
     error: str | None = None
+    skipped: bool = False
+    skip_reason: str | None = None
+
+
+class SkipTarget(Exception):
+    """Marks a known, non-retryable target exclusion without failing the job."""
+
+    def __init__(
+        self, reason: str, *, details: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.details = details or {}
 
 
 @dataclass
@@ -32,11 +46,15 @@ class JobResult:
 
     @property
     def succeeded(self) -> int:
-        return sum(item.success for item in self.targets)
+        return sum(item.success and not item.skipped for item in self.targets)
+
+    @property
+    def skipped(self) -> int:
+        return sum(item.skipped for item in self.targets)
 
     @property
     def failed(self) -> int:
-        return len(self.targets) - self.succeeded
+        return sum(not item.success for item in self.targets)
 
 
 @dataclass(frozen=True)

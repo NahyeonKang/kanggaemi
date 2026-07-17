@@ -3,5 +3,6 @@ CRON_TZ=Asia/Seoul
 SHELL=/bin/sh
 
 # Replace /opt/kanggaemi/backend and the Python path for the deployment.
-# The wrapper preserves universe-refresh -> stock-prices ordering on Sundays.
+# The wrapper preserves master -> active-contract -> futures and
+# universe -> stock-detail ordering, with KIS token cooldowns.
 0 5 * * * cd /opt/kanggaemi/backend && KANGGAEMI_PYTHON=/opt/kanggaemi/venv/bin/python /bin/sh ./deploy/run_daily_batch.sh

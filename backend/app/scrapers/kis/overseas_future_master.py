@@ -44,6 +44,10 @@ class OverseasFutureMasterItem(BaseModel):
     contract_size: Optional[str] = None      # 계약크기
     price_base: Optional[str] = None         # 가격표시진법
     mult: Optional[str] = None               # 환산승수
+    most_active_flag: Optional[str] = None   # 최다월물여부 0=원월물, 1=최다월물
+    nearest_flag: Optional[str] = None       # 최근월물여부 0=원월물, 1=최근월물
+    spread_flag: Optional[str] = None        # 스프레드여부
+    spread_leg1_flag: Optional[str] = None   # 스프레드 기준종목 LEG1 여부
     sub_exch_cd: Optional[str] = None        # 서브 거래소 코드
 
 
@@ -106,6 +110,10 @@ def _parse_row(row: str) -> OverseasFutureMasterItem:
         contract_size=(row[-31:-21].rstrip() or None),
         price_base=(row[-21:-17].rstrip() or None),
         mult=(row[-17:-7].rstrip() or None),
+        most_active_flag=(row[-7:-6].rstrip() or None),
+        nearest_flag=(row[-6:-5].rstrip() or None),
+        spread_flag=(row[-5:-4].rstrip() or None),
+        spread_leg1_flag=(row[-4:-3].rstrip() or None),
         sub_exch_cd=(row[-3:].rstrip() or None),
     )
 

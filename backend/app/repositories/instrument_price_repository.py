@@ -168,3 +168,18 @@ class InstrumentPriceRepository:
             .order_by(DerivativeSnapshotModel.observed_at.desc())
             .first()
         )
+
+    def get_derivative_history_asof(
+        self, db: Session, entity_code: str, start_as_of: datetime, end_as_of: datetime
+    ) -> list[DerivativeSnapshotModel]:
+        """Read only snapshots observable inside the requested point-in-time window."""
+        return (
+            db.query(DerivativeSnapshotModel)
+            .filter_by(entity_code=entity_code)
+            .filter(
+                DerivativeSnapshotModel.observed_at >= start_as_of,
+                DerivativeSnapshotModel.observed_at <= end_as_of,
+            )
+            .order_by(DerivativeSnapshotModel.observed_at.asc())
+            .all()
+        )

@@ -6,7 +6,7 @@ app/models/domestic_derivative_master.py
 해외선물 overseas_future_master와 같은 사상(단일 마스터 테이블 + 소스 구분).
 """
 from sqlalchemy import (
-    BigInteger, Column, DateTime, Index, String, UniqueConstraint,
+    BigInteger, Column, DateTime, Index, Integer, String, UniqueConstraint,
 )
 
 from app.db.base import Base
@@ -15,7 +15,7 @@ from app.db.base import Base
 class DomesticDerivativeMasterModel(Base):
     __tablename__ = "domestic_derivative_master"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     market_type = Column(String(4), nullable=False)        # idx | stk
     srs_cd = Column(String(16), nullable=False)            # 단축코드(종목코드)
     std_cd = Column(String(24))                            # 표준코드
