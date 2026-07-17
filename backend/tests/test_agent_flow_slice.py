@@ -97,11 +97,29 @@ def test_plan_selects_only_active_flow_factors_for_equity():
         "asset_class": "kr_equity",
         "applicable_dimensions": ["macro", "flow", "industry", "valuation"],
     }})
-    assert {factor["factor_id"] for factor in update["selected_factors"]} == {
+    assert {
+        factor["factor_id"] for factor in update["selected_factors"]
+        if factor["dimension"] == "flow"
+    } == {
         "FLOW_FOREIGN_SPOT", "FLOW_INSTITUTION_SPOT",
         "FLOW_INDIVIDUAL_SPOT", "PROGRAM_NET",
     }
     assert "SHORT_BALANCE" not in update["execution_plan"]["flow_node"]
+
+
+def test_plan_expands_active_dimensions_and_singular_financial_spec():
+    update = plan_node({"classification": {
+        "asset_class": "kr_equity",
+        "applicable_dimensions": ["macro", "flow", "industry", "valuation"],
+    }})
+    dimensions = {factor["dimension"] for factor in update["selected_factors"]}
+    valuation_ids = {
+        factor["factor_id"] for factor in update["selected_factors"]
+        if factor["dimension"] == "valuation"
+    }
+    assert dimensions == {"macro", "flow", "industry", "valuation"}
+    assert "VAL_REVENUE_GROWTH" in valuation_ids
+    assert "VAL_OP_MARGIN" in valuation_ids
 
 
 def test_feature_engine_enforces_as_of_and_evidence_contract(monkeypatch):
@@ -145,6 +163,42 @@ def test_feature_engine_enforces_as_of_and_evidence_contract(monkeypatch):
     assert result.evidence.observation_date == "2026-07-15"
     assert result.evidence.as_of_date == "2026-07-15"
     assert result.evidence.data_spec_id == "DS_KR_EQUITY_INVESTOR_FLOW"
+
+
+def test_index_futures_factor_uses_grounded_contract_evidence(monkeypatch):
+    feature = FeatureEngine(fetcher=SimpleNamespace(fetch_stock_bundle=lambda *_: []))
+    monkeypatch.setattr(
+        feature, "_read_points",
+        lambda *_: [SeriesPoint("2026-07-16", 0.35, "kis", "A01609")],
+    )
+    result = feature.compute_factor(
+        SelectedFactor(
+            factor_id="FUTURES_BASIS_DISPARITY", factor_name="선물 괴리율",
+            dimension="flow", data_spec_id="DS_KR_INDEX_FUTURES_BASIS",
+            transform={"method": "level", "window": None},
+            interpretation={}, caveats=[],
+        ),
+        {"asset_class": "kr_index", "asset_code": "0001", "market": "KOSPI"},
+        "2026-07-16",
+    )
+    assert result.evidence is not None
+    assert result.evidence.entity_code == "A01609"
+    assert result.evidence.field == "disparity"
+
+
+def test_missing_flow_adapter_does_not_abort_graph():
+    feature = FeatureEngine(fetcher=SimpleNamespace(fetch_stock_bundle=lambda *_: []))
+    result = feature.compute_factor(
+        SelectedFactor(
+            factor_id="UNIMPLEMENTED_ACTIVE_FACTOR", factor_name="미구현 팩터",
+            dimension="flow", data_spec_id="DS_KR_INDEX_FUTURES_BASIS",
+            transform={"method": "level"}, interpretation={}, caveats=[],
+        ),
+        {"asset_class": "kr_index", "asset_code": "0001", "market": "KOSPI"},
+        "2026-07-16",
+    )
+    assert result.evidence is None
+    assert "adapter missing" in result.missing_reason
 
 
 def test_factory_flow_analyzer_writes_only_flow_state_key():

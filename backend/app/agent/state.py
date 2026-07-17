@@ -15,5 +15,17 @@ class InvestmentAgentState(TypedDict, total=False):
     node_order: list[str]
     skipped_dimensions: list[dict[str, str]]
     planning_confidence: float
+    macro_result: dict[str, Any]
     flow_result: dict[str, Any]
+    industry_result: dict[str, Any]
+    valuation_result: dict[str, Any]
+    synthesis_result: dict[str, Any]
+    evaluation_result: dict[str, Any]
+    evaluation_feedback: list[str]
+    revision_count: int
+    max_synthesis_revisions: int
+    user_facing_report: str
+    notion_report_page: dict[str, Any]
+    report_run_summary: dict[str, Any]
+    tags: list[str]
     simple_output: str

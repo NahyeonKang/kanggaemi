@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import hashlib
+import re
 import tempfile
 from contextlib import contextmanager
 from datetime import date
@@ -44,8 +45,14 @@ class AssetTaxonomyRegistry:
                 [asset], allow_unicode=True, sort_keys=False, default_flow_style=False
             ).rstrip()
             block = "\n\n" + "\n".join(f"  {line}" for line in dumped.splitlines()) + "\n"
-            with self.path.open("a", encoding="utf-8") as file:
-                file.write(block)
+            with self.path.open("r+", encoding="utf-8") as file:
+                content = file.read()
+                content = re.sub(
+                    r"(?m)^assets:\s*\[\]\s*$", "assets:", content, count=1
+                )
+                file.seek(0)
+                file.write(content.rstrip() + block)
+                file.truncate()
                 file.flush()
                 os.fsync(file.fileno())
 

@@ -86,3 +86,47 @@ class DimensionResult(BaseModel):
     retail_flow_view: str | None = None
     futures_positioning_view: str | None = None
     program_trading_view: str | None = None
+    rate_view: str | None = None
+    fx_view: str | None = None
+    liquidity_view: str | None = None
+    volatility_view: str | None = None
+    commodity_view: str | None = None
+    cycle_view: str | None = None
+    demand_supply_view: str | None = None
+    peer_view: str | None = None
+    sector_relative_view: str | None = None
+    absolute_valuation_view: str | None = None
+    relative_valuation_view: str | None = None
+    earnings_revision_view: str | None = None
+    historical_band_view: str | None = None
+
+
+class SynthesisResult(BaseModel):
+    final_view: Signal
+    confidence: float = Field(ge=0, le=1)
+    investment_horizon: str
+    summary: str
+    strategy: dict[str, str]
+    scenario_analysis: dict[str, str]
+    key_evidence: list[Evidence]
+    key_risks: list[str]
+    monitoring_indicators: list[str]
+    final_report: str
+
+
+class EvaluationResult(BaseModel):
+    evaluation_score: int = Field(ge=0, le=100)
+    passed: bool
+    rubric_scores: dict[str, int]
+    warnings: list[str] = Field(default_factory=list)
+    critical_issues: list[str] = Field(default_factory=list)
+    improvement_suggestions: list[str] = Field(default_factory=list)
+    missing_factors: list[str] = Field(default_factory=list)
+    revised_summary: str = ""
+
+
+class ReportOutput(BaseModel):
+    user_facing_report: str
+    notion_report_page: dict[str, Any]
+    report_run_summary: dict[str, Any]
+    tags: list[str] = Field(default_factory=list)

@@ -75,3 +75,21 @@ class StockFinancialsRepository:
         if end_yymm:
             query = query.filter(StockFinancialsModel.stac_yymm <= end_yymm)
         return query.order_by(StockFinancialsModel.stac_yymm.desc()).all()
+
+    def get_series_asof(
+        self, db: Session, ticker: str, period_type: str,
+        start_yymm: str, end_yymm: str, ingested_asof: datetime,
+    ) -> list[StockFinancialsModel]:
+        """Exclude statements that were not yet present at the analysis cutoff."""
+        return (
+            db.query(StockFinancialsModel)
+            .filter(
+                StockFinancialsModel.ticker == ticker,
+                StockFinancialsModel.period_type == period_type,
+                StockFinancialsModel.stac_yymm >= start_yymm,
+                StockFinancialsModel.stac_yymm <= end_yymm,
+                StockFinancialsModel.ingested_at <= ingested_asof,
+            )
+            .order_by(StockFinancialsModel.stac_yymm.asc())
+            .all()
+        )

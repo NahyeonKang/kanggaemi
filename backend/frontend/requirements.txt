@@ -1,0 +1,4 @@
+streamlit>=1.49,<2
+PyYAML>=6,<7
+Markdown>=3.7,<4
+weasyprint>=68,<70

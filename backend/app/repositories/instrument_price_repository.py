@@ -169,6 +169,20 @@ class InstrumentPriceRepository:
             .first()
         )
 
+    def get_valuation_history_asof(
+        self, db: Session, ticker: str, start_as_of: datetime, end_as_of: datetime
+    ) -> list[StockValuationSnapshotModel]:
+        return (
+            db.query(StockValuationSnapshotModel)
+            .filter_by(ticker=ticker)
+            .filter(
+                StockValuationSnapshotModel.observed_at >= start_as_of,
+                StockValuationSnapshotModel.observed_at <= end_as_of,
+            )
+            .order_by(StockValuationSnapshotModel.observed_at.asc())
+            .all()
+        )
+
     def get_derivative_history_asof(
         self, db: Session, entity_code: str, start_as_of: datetime, end_as_of: datetime
     ) -> list[DerivativeSnapshotModel]:
