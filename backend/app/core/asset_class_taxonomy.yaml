@@ -3,12 +3,12 @@ updated_at: "2026-06-28"
 
 # ── asset_class taxonomy (STATIC CONFIG, 권위) ──────────────────────────
 # 닫힌 집합. LLM이 생성/변형하지 않음(controlled vocabulary).
-# factor_catalog.yaml / data_specs.yaml가 이 asset_class 값을 키로 참조한다.
+# factor_catalog.yaml가 이 asset_class 값을 키로 참조한다.
 #
 # 역할 분리:
-#   - 이 파일       : asset_class별 "정책"(적용 dimension, 기본 data_spec, 코드 포맷).
+#   - 이 파일       : asset_class별 "정책"(적용 dimension, 코드 포맷).
 #   - asset_taxonomy: 질의에 등장한 "개별 인스턴스"(티커/업종코드…)를 검증해 캐시.
-#     인스턴스는 asset_class만 참조하고, dimension/data_spec은 여기서 끌어쓴다.
+#     인스턴스는 asset_class만 참조하고, dimension은 여기서 끌어쓴다.
 
 classes:
   - asset_class: kr_equity
@@ -16,8 +16,9 @@ classes:
     region: kr
     markets: [KOSPI, KOSDAQ]
     entity_code_format: "6-digit 종목코드 (예: 005930)"
-    entity_code_source: KIS 종목정보 다운로드(국내) / 종목마스터
-    applicable_dimensions: [flow, industry, valuation]
+    entity_code_source: KIS kospi_code.mst, kosdaq_code.mst
+    applicable_dimensions: [macro, flow, industry, valuation]
+    default_horizon: 3M
     caveats:
       - macro는 직접 적용하지 않고 kr_index 시장 backdrop으로 참조.
     status: active
@@ -27,9 +28,9 @@ classes:
     region: us
     markets: [NYSE, NASDAQ]
     entity_code_format: "ticker symbol (예: AAPL)"
-    entity_code_source: 미국 종목마스터(미수집)
-    applicable_dimensions: [industry, valuation]
-    data_coverage: none
+    entity_code_source: KIS nasmst.cod, nysmst.cod
+    applicable_dimensions: [macro, industry, valuation]
+    default_horizon: 1Y
     caveats:
       - macro는 직접 적용하지 않고 us_index 시장 backdrop으로 참조.
     status: active
@@ -37,10 +38,11 @@ classes:
   - asset_class: kr_index
     description: 국내 지수
     region: kr
-    markets: [KOSPI, KOSDAQ, KRX]
-    entity_code_format: "지수/업종 = 4-digit 업종코드(예: 0001); 선물/옵션 = KIS 선물옵션 종목코드(예: 101W09)"
-    entity_code_source: KIS 업종코드(FAQ 다운로드) / 선물옵션 종목마스터
+    markets: [KOSPI, KOSDAQ]
+    entity_code_format: "지수/업종 = 4-digit 업종코드(예: 0001)"
+    entity_code_source: KIS 업종코드 idxcode.mst
     applicable_dimensions: [macro, flow, valuation]
+    default_horizon: 3M
     caveats:
       - 선물/옵션 entity_code는 만기마다 변경됨 → 캐시 재검증 필요(verified_at 갱신).
     status: active
@@ -48,10 +50,11 @@ classes:
   - asset_class: us_index
     description: 미국 지수
     region: us
-    markets: [US]
-    entity_code_format: "index/series symbol (예: VIXCLS, NASDAQSOX)"
-    entity_code_source: FRED series_id 등
+    markets: [NYSE, NASDAQ]
+    entity_code_format: "index/series symbol (예: QNDAQ)"
+    entity_code_source: KIS 해외지수코드 frgn_code.mst
     applicable_dimensions: [macro, valuation]
+    default_horizon: 1Y
     caveats:
       - 금리/달러/VIX/SOX/실질금리/BEI는 active. 유가·금·원자재·Fed Funds·5Y 미수집.
       - 지수 밸류에이션(PER/PBR/ROE) 미수집.
@@ -60,21 +63,23 @@ classes:
   - asset_class: fx
     description: 외환(현재 USD/KRW)
     region: kr
-    markets: [KB]
+    markets: []
     entity_code_format: "currency pair (예: USDKRW)"
     entity_code_source: 고정 페어(스크래퍼 내장)
     applicable_dimensions: [macro]
+    default_horizon: 1M
     caveats:
       - 현재 USD/KRW만. 타 통화 확장 시 스크래퍼/스펙 추가 필요.
     status: active
 
   - asset_class: commodity
-    description: 원자재(유가/금/원자재지수 등)
+    description: 원자재(유가/금/구리 등)
     region: global
     markets: []
-    entity_code_format: "symbol (예: WTI, BRENT, GOLD)"
-    entity_code_source: 미수집(FRED/원자재 소스 예정)
+    entity_code_format: "symbol (예: BZU26)"
+    entity_code_source: KIS 해외선물코드 ffcode.mst
     applicable_dimensions: [macro]
+    default_horizon: 3M
     caveats:
       - 전량 미수집. factor_catalog의 CMDT_* draft에 대응. 수집 파이프라인 추가 필요.
     status: active

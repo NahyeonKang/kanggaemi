@@ -46,11 +46,11 @@ else:
 
 
 # asset_class_taxonomy.yaml defines the controlled vocabulary for asset_class.
-# It describes class-level rules: applicable dimensions, default data specs,
+# It describes class-level rules: applicable dimensions, default analysis horizon,
 # code policy, region/market, and coverage. LLMs should not invent these values.
 # asset_taxonomy.yaml is different: it caches individual resolved assets such as
 # Samsung Electronics, KOSPI, or USDKRW, and each item references one asset_class.
-# factor_catalog.yaml and data_specs.yaml should also reference these asset_class
+# factor_catalog.yaml should also reference these asset_class
 # values as a controlled vocabulary.
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -59,8 +59,13 @@ DEFAULT_DATABASE_KEY = "asset_class_taxonomy"
 CODE_CHUNK_SIZE = 1800
 APPEND_BATCH_SIZE = 80
 MANUAL_NOTES_HEADING = "Manual Notes"
-KNOWN_DEFAULT_DATA_SPEC_KEYS = ["flow", "industry", "valuation", "macro"]
 SNAKE_CASE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+# default_horizon is a controlled enum (ordered from shortest to longest).
+# Values are NOT snake_case (e.g. "1D", "Long-term"), so they are validated
+# against this whitelist rather than SNAKE_CASE_RE.
+HORIZON_VALUES = ["1D", "1W", "1M", "3M", "6M", "1Y", "Long-term"]
+ALLOWED_HORIZONS = set(HORIZON_VALUES)
 
 PROPERTY_MAPPING: dict[str, tuple[str, str, list[str]]] = {
     "asset_class": ("asset_class", "title", ["asset_class", "asset class", "assetclass"]),
@@ -70,7 +75,7 @@ PROPERTY_MAPPING: dict[str, tuple[str, str, list[str]]] = {
     "entity_code_format": ("entity_code_format", "rich_text", ["entity_code_format", "entity code format", "entitycodeformat"]),
     "entity_code_source": ("entity_code_source", "rich_text", ["entity_code_source", "entity code source", "entitycodesource"]),
     "applicable_dimensions": ("applicable_dimensions", "multi_select", ["applicable_dimensions", "applicable dimensions", "applicabledimensions"]),
-    "data_coverage": ("data_coverage", "select", ["data_coverage", "data coverage", "datacoverage"]),
+    "default_horizon": ("default_horizon", "select", ["default_horizon", "default horizon", "defaulthorizon"]),
     "status": ("status", "select", ["status"]),
 }
 
@@ -172,27 +177,29 @@ def load_asset_class_taxonomy(path: Path, warnings: list[str]) -> list[dict[str,
             raise ValueError(f"Duplicate asset_class in YAML: {asset_class}")
         seen.add(asset_class)
 
-        for field_name in ("asset_class", "region", "status", "data_coverage"):
+        for field_name in ("asset_class", "region", "status"):
             value = item.get(field_name)
             if isinstance(value, str) and not SNAKE_CASE_RE.match(value):
                 warnings.append(
                     f"{asset_class}: '{field_name}' should preferably be lowercase snake_case."
                 )
 
+        # default_horizon must be one of the controlled enum values.
+        # Invalid value is a hard error; missing value is a soft warning.
+        horizon = item.get("default_horizon")
+        if horizon is None:
+            warnings.append(
+                f"{asset_class}: 'default_horizon' is missing; expected one of {HORIZON_VALUES}."
+            )
+        elif horizon not in ALLOWED_HORIZONS:
+            raise ValueError(
+                f"{asset_class}: invalid default_horizon '{horizon}'. "
+                f"Must be one of {HORIZON_VALUES}."
+            )
+
         item.setdefault("markets", [])
         item.setdefault("applicable_dimensions", [])
         item.setdefault("caveats", [])
-        item.setdefault("default_data_specs", {})
-
-        default_data_specs = item.get("default_data_specs")
-        if not isinstance(default_data_specs, dict):
-            warnings.append(f"{asset_class}: default_data_specs should be a dict; treating as empty.")
-            item["default_data_specs"] = {}
-            default_data_specs = {}
-
-        for key in default_data_specs:
-            if key not in KNOWN_DEFAULT_DATA_SPEC_KEYS:
-                warnings.append(f"{asset_class}: unknown default_data_specs key '{key}'.")
 
     return classes
 
@@ -207,20 +214,11 @@ def optional_yaml(path: Path, warnings: list[str]) -> Any:
         return None
 
 
-def collect_data_spec_ids(data_specs_data: Any) -> set[str]:
-    specs = data_specs_data.get("data_specs") if isinstance(data_specs_data, dict) else []
-    if not isinstance(specs, list):
-        return set()
-    return {spec.get("data_spec_id") for spec in specs if isinstance(spec, dict) and spec.get("data_spec_id")}
-
-
 def validate_cross_file_consistency(classes: list[dict[str, Any]], warnings: list[str]) -> None:
     taxonomy_asset_classes = {item["asset_class"] for item in classes}
 
     asset_taxonomy = optional_yaml(sibling_core_path("asset_taxonomy.yaml"), warnings)
-    data_specs = optional_yaml(sibling_core_path("data_specs.yaml"), warnings)
     factor_catalog = optional_yaml(sibling_core_path("factor_catalog.yaml"), warnings)
-    data_spec_ids = collect_data_spec_ids(data_specs)
 
     assets = asset_taxonomy.get("assets") if isinstance(asset_taxonomy, dict) else []
     if isinstance(assets, list):
@@ -233,17 +231,6 @@ def validate_cross_file_consistency(classes: list[dict[str, Any]], warnings: lis
                     f"asset_taxonomy asset '{asset.get('asset_code', '<unknown>')}' references unknown asset_class '{asset_class}'."
                 )
 
-    specs = data_specs.get("data_specs") if isinstance(data_specs, dict) else []
-    if isinstance(specs, list):
-        for spec in specs:
-            if not isinstance(spec, dict):
-                continue
-            for asset_class in as_list(get_nested(spec, "coverage.asset_classes", [])):
-                if asset_class and asset_class not in taxonomy_asset_classes:
-                    warnings.append(
-                        f"data_specs '{spec.get('data_spec_id', '<unknown>')}' references unknown asset_class '{asset_class}'."
-                    )
-
     factors = factor_catalog.get("factors") if isinstance(factor_catalog, dict) else []
     if isinstance(factors, list):
         for factor in factors:
@@ -254,16 +241,6 @@ def validate_cross_file_consistency(classes: list[dict[str, Any]], warnings: lis
                     warnings.append(
                         f"factor_catalog '{factor.get('factor_id', '<unknown>')}' references unknown asset_class '{asset_class}'."
                     )
-
-    if data_spec_ids:
-        for item in classes:
-            asset_class = item["asset_class"]
-            for key, values in item.get("default_data_specs", {}).items():
-                for data_spec_id in as_list(values):
-                    if data_spec_id and data_spec_id not in data_spec_ids:
-                        warnings.append(
-                            f"{asset_class}: default_data_specs.{key} references unknown data_spec_id '{data_spec_id}'."
-                        )
 
 
 def schema_property(
@@ -377,11 +354,10 @@ def build_page_children(asset_class_item: dict[str, Any]) -> list[dict[str, Any]
 
     append_text_section(children, "Description", asset_class_item.get("description", ""))
     append_text_section(children, "Region", asset_class_item.get("region", ""))
+    append_text_section(children, "Default Horizon", asset_class_item.get("default_horizon", ""))
     append_list_section(children, "Markets", asset_class_item.get("markets", []))
     append_yaml_section(children, "Entity Code Policy", entity_code_policy(asset_class_item))
     append_list_section(children, "Applicable Dimensions", asset_class_item.get("applicable_dimensions", []))
-    append_yaml_section(children, "Default Data Specs", asset_class_item.get("default_data_specs", {}))
-    append_text_section(children, "Data Coverage", asset_class_item.get("data_coverage", ""))
     append_list_section(children, "Caveats", asset_class_item.get("caveats", []))
     children.append(heading_2(MANUAL_NOTES_HEADING))
     children.append(paragraph(""))

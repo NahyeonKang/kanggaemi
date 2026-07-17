@@ -14,11 +14,15 @@ from app.models.instrument_price import (
     InstrumentOhlcvModel, StockValuationSnapshotModel, DerivativeSnapshotModel,
 )
 from app.repositories.instrument_price_repository import InstrumentPriceRepository
+from app.repositories.overseas_future_master_repository import (
+    OverseasFutureMasterRepository,
+)
 from app.scrapers.kis.kis_chart_scraper import KISChartScraper
+from app.scrapers.kis.kis_overseas_futures_scraper import KISOverseasFuturesScraper
 
 logger = logging.getLogger(__name__)
 
-_ALLOWED_ASSET_CLASSES = frozenset({"stock", "index", "future", "option"})
+_ALLOWED_ASSET_CLASSES = frozenset({"stock", "index", "future", "option", "os_future"})
 _ALLOWED_PERIODS = frozenset({"D", "W", "M", "Y"})
 _DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _YYYYMMDD_PATTERN = re.compile(r"^\d{8}$")
@@ -27,7 +31,9 @@ _YYYYMMDD_PATTERN = re.compile(r"^\d{8}$")
 class InstrumentPriceService:
     def __init__(self) -> None:
         self._scraper = KISChartScraper()
+        self._overseas_scraper = KISOverseasFuturesScraper()
         self._repo = InstrumentPriceRepository()
+        self._master_repo = OverseasFutureMasterRepository()
 
     def sync_chart(
         self,
@@ -75,6 +81,50 @@ class InstrumentPriceService:
             "end_date": max(dates) if dates else None,
         }
 
+    def sync_overseas_futures(
+        self,
+        db: Session,
+        exch_cd: str,
+        srs_cd: str,
+        close_date: str,                    # YYYYMMDD (조회종료일)
+        qry_cnt: int = 40,
+        calc_decimal: Optional[int] = None,  # sCalcDesz(마스터). None이면 raw
+        currency: Optional[str] = None,      # 상품 통화(마스터)
+        max_pages: int = 25,
+    ) -> dict:
+        """해외선물 일간 OHLCV. entity_code='EXCH:SRS', asset_class='os_future'.
+
+        calc_decimal/currency 미지정 시 overseas_future_master에서 자동 조회.
+        """
+        self._validate_required_yyyymmdd(close_date, "close_date")
+
+        # 마스터에서 sCalcDesz/currency 자동 보완 (명시값 우선)
+        if calc_decimal is None:
+            calc_decimal = self._master_repo.resolve_calc_decimal(db, srs_cd)
+        if currency is None:
+            currency = self._master_repo.resolve_currency(db, srs_cd)
+
+        data = self._overseas_scraper.fetch_daily_ohlcv(
+            exch_cd, srs_cd, close_date, qry_cnt=qry_cnt,
+            calc_decimal=calc_decimal, currency=currency, max_pages=max_pages,
+        )
+        ohlcv_affected = self._repo.upsert_ohlcv(
+            db, data.source, data.asset_class, data.entity_code, data.resolution,
+            data.observations, currency=data.currency,
+        )
+        dates = [o.observation_date for o in data.observations]
+        return {
+            "source": data.source,
+            "asset_class": data.asset_class,
+            "entity_code": data.entity_code,
+            "resolution": data.resolution,
+            "ohlcv_affected": ohlcv_affected,
+            "snapshot_affected": 0,
+            "start_date": min(dates) if dates else None,
+            "end_date": max(dates) if dates else None,
+            "currency": data.currency,
+        }
+
     def get_ohlcv(
         self, db: Session, asset_class: str, entity_code: str,
         resolution: str, start_date: str, end_date: str,
@@ -119,3 +169,8 @@ class InstrumentPriceService:
     def _validate_yyyymmdd(value: Optional[str]) -> None:
         if value is not None and not _YYYYMMDD_PATTERN.match(value):
             raise ValueError(f"date must be YYYYMMDD, got: {value!r}")
+
+    @staticmethod
+    def _validate_required_yyyymmdd(value: str, field_name: str) -> None:
+        if not value or not _YYYYMMDD_PATTERN.match(value):
+            raise ValueError(f"{field_name} must be YYYYMMDD, got: {value!r}")

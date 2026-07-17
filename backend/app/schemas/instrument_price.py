@@ -1,8 +1,8 @@
 """
 app/schemas/instrument_price.py
 
-통합 시세 스키마 (주식/업종/선물옵션).
-  - scraper-layer: ChartResult(ohlcv + 자산군별 스냅샷).
+통합 시세 스키마 (주식/업종/국내선물옵션 + 해외선물).
+  - scraper-layer: ChartResult(ohlcv + 자산군별 스냅샷 + currency).
   - API-layer: OHLCV / valuation / derivative 응답, sync 응답.
 """
 from datetime import datetime
@@ -57,15 +57,16 @@ class DerivativeSnapshot(BaseModel):
 
 
 class ChartResult(BaseModel):
-    """스크래퍼 반환: OHLCV + (자산군에 따라) 스냅샷 하나."""
+    """스크래퍼 반환: OHLCV + (자산군에 따라) 스냅샷 하나 + currency(해외선물)."""
 
     model_config = ConfigDict(from_attributes=True)
 
     source: str = "kis"
-    asset_class: str                       # stock | index | future | option
+    asset_class: str                       # stock | index | future | option | os_future
     entity_code: str
     resolution: str
     observed_at: datetime
+    currency: Optional[str] = None         # 해외선물 상품 통화(USD 등)
     observations: list[OhlcvObservation]
     valuation: Optional[StockValuationSnapshot] = None
     derivative: Optional[DerivativeSnapshot] = None
@@ -86,6 +87,7 @@ class OhlcvResponse(BaseModel):
     close: Optional[Decimal]
     volume: Optional[Decimal]
     amount: Optional[Decimal]
+    currency: Optional[str] = None
     ingested_at: datetime
 
 
@@ -137,3 +139,4 @@ class ChartSyncResponse(BaseModel):
     snapshot_affected: int
     start_date: Optional[str]
     end_date: Optional[str]
+    currency: Optional[str] = None

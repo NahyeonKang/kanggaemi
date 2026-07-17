@@ -578,46 +578,6 @@ factors:
       - disparity(괴리율) 및 theoretical_price 사용.
     status: active
 
-  - factor_id: ARBITRAGE_BALANCE
-    factor_name: 차익거래 잔고
-    dimension: flow
-    asset_classes: [kr_index]
-    data_spec_ids: DS_KR_MARKET_PROGRAM_TRADING
-    frequency: daily
-    unit: KRW
-    cumulative_type: cumulative
-    transform:
-      method: cumulative_sum
-      window: null
-    interpretation:
-      positive: 차익 매수잔고 누적 증가는 향후 청산 시 매도압력 잠재.
-      negative: 차익잔고 청산은 현물 매도.
-      neutral: 변화 미미하면 중립.
-    output_fields: [signal, strength, evidence, caveat]
-    caveats:
-      - 현재 데이터는 '잔고'가 아니라 일별 차익(arbt) 매매대금 → 누적 근사. 실제 잔고는 별도 소스 필요.
-    status: draft
-
-  - factor_id: NONARBITRAGE_BALANCE
-    factor_name: 비차익거래 잔고
-    dimension: flow
-    asset_classes: [kr_index]
-    data_spec_ids: DS_KR_MARKET_PROGRAM_TRADING
-    frequency: daily
-    unit: KRW
-    cumulative_type: cumulative
-    transform:
-      method: cumulative_sum
-      window: null
-    interpretation:
-      positive: 비차익 매수 우위는 방향성 수급 동력.
-      negative: 비차익 매도 우위는 수급 부담.
-      neutral: 변화 미미하면 중립.
-    output_fields: [signal, strength, evidence, caveat]
-    caveats:
-      - 일별 비차익(nabt) 매매대금의 누적 근사. 실제 잔고와 다를 수 있음.
-    status: draft
-
   - factor_id: SHORT_BALANCE
     factor_name: 공매도 잔고
     dimension: flow

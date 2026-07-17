@@ -46,6 +46,7 @@ class InstrumentPriceRepository:
         entity_code: str,
         resolution: str,
         rows: list[OhlcvObservation],
+        currency: Optional[str] = None,
     ) -> int:
         now = _utcnow()
         affected = 0
@@ -64,12 +65,15 @@ class InstrumentPriceRepository:
                         setattr(existing, f, getattr(o, f))
                     existing.ingested_at = now
                     affected += 1
+                # currency는 심볼별로 안정적 → 값이 다를 때만 보정(변경 카운트엔 미포함)
+                if currency is not None and existing.currency != currency:
+                    existing.currency = currency
             else:
                 db.add(
                     InstrumentOhlcvModel(
                         source=source, asset_class=asset_class, entity_code=entity_code,
                         resolution=resolution, observation_date=o.observation_date,
-                        ingested_at=now,
+                        currency=currency, ingested_at=now,
                         **{f: getattr(o, f) for f in _OHLCV_FIELDS},
                     )
                 )
