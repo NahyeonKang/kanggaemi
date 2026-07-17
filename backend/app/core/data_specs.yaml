@@ -2362,3 +2362,118 @@ data_specs:
       - 만기물 코드(예 6AM24)는 만기 후 조회 불가 → 현재 월물 사용.
     notes:
       - calc_decimal/currency는 overseas_future_master(ffcode.mst)에서 resolve.
+
+# ===================================================================
+  # 증시자금 (KIS, 금융투자협회 중계) — macro 유동성
+  # ===================================================================
+  - data_spec_id: DS_KR_MARKET_FUNDS
+    name: 국내 증시자금 종합(일별)
+    description: 고객예탁금·신용융자잔고·미수금액·선물예수금·금액회전율 등 일별 증시 유동성 지표. mktfunds output.
+    status: active
+
+    source:
+      provider: KIS
+      source_type: api
+      module: app.scrapers.kis.kis_market_funds_scraper
+      function: fetch_market_funds
+      endpoint_name: 국내 증시자금 종합 [국내주식-193]
+      endpoint_path: /uapi/domestic-stock/v1/quotations/mktfunds
+      auth_required: true
+
+    usage:
+      dimensions: [macro]
+      related_factors: [LIQ_DEPOSIT, LIQ_CREDIT]
+
+    params:
+      required: []
+      optional:
+        - name: date
+          type: string
+          example: "20240503"
+          default: today
+          description: 기준일 YYYYMMDD. 이 날짜에서 과거로 시계열 반환. 생략 시 오늘(KST)
+
+    data_contract:
+      grain: macro_date
+      frequency: daily
+      timezone: Asia/Seoul
+      unit:
+        customer_deposit: KRW_100M
+        customer_deposit_change: KRW_100M
+        amount_turnover: percent
+        receivable: KRW_100M
+        credit_loan_balance: KRW_100M
+        futures_deposit: KRW_100M
+      cumulative_type: daily
+      is_estimated: false
+      update_timing: 영업일 EOD(금융투자협회 집계 반영)
+      expected_lag: 1영업일 내외(지연 가능)
+      history_available: 기준일 기준 과거 수개월(한 호출)
+
+    output_schema:
+      primary_key: [source, observation_date]
+      datetime_field: observation_date
+      fields:
+        - name: source
+          type: string
+          nullable: false
+          unit: null
+          description: "kis"
+        - name: observation_date
+          type: date
+          nullable: false
+          unit: null
+          description: 영업일 YYYY-MM-DD (bsop_date)
+        - name: customer_deposit
+          type: float
+          nullable: true
+          unit: KRW_100M
+          description: 고객예탁금금액(cust_dpmn_amt)
+        - name: customer_deposit_change
+          type: float
+          nullable: true
+          unit: KRW_100M
+          description: 고객예탁금 전일대비(cust_dpmn_amt_prdy_vrss, ±)
+        - name: amount_turnover
+          type: float
+          nullable: true
+          unit: percent
+          description: 금액회전율(amt_tnrt)
+        - name: receivable
+          type: float
+          nullable: true
+          unit: KRW_100M
+          description: 미수금액(uncl_amt)
+        - name: credit_loan_balance
+          type: float
+          nullable: true
+          unit: KRW_100M
+          description: 신용융자잔고(crdt_loan_rmnd)
+        - name: futures_deposit
+          type: float
+          nullable: true
+          unit: KRW_100M
+          description: 선물예수금금액(futs_tfam_amt)
+        - name: ingested_at
+          type: datetime
+          nullable: false
+          unit: null
+          description: 적재 시각(UTC)
+
+    validation:
+      freshness_check: true
+      max_missing_ratio: 0.1
+      required_fields: [observation_date, customer_deposit, credit_loan_balance]
+      sanity_checks:
+        - customer_deposit > 0
+        - credit_loan_balance > 0
+        - customer_deposit_change can be negative
+
+    caveats:
+      - 금액 단위 억원(KRW_100M), 금액회전율만 percent. 에이전트 사용 시 억원↔원 스케일 주의.
+      - 출처는 금융투자협회 자료의 KIS 중계 → 오류·지연·정정 가능(is_estimated는 false지만 지연 유의).
+      - pagination 없음(tr_cont 다음조회 불가). 기준일에서 과거로 시계열 반환.
+      - 응답의 업종지수·시총·주식형/혼합형/채권형/MMF/담보대출 등은 미사용(6개 지표만 적재).
+      - 정정 이력 필요 시 (observation_date, ingested_at) 유니크 + insert-on-change로 승격.
+    notes:
+      - 원자료 단위 억원(정의서 명시).
