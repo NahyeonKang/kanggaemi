@@ -718,14 +718,95 @@ factors:
       - ROE와 결합(PBR-ROE) 해석 권장.
     status: active
 
+  - factor_id: VAL_REVENUE_GROWTH
+    factor_name: 매출액 증가율
+    dimension: valuation
+    asset_classes: [kr_equity]
+    data_spec_id: DS_KR_EQUITY_FINANCIALS
+    frequency: quarterly
+    unit: percent
+    cumulative_type: ytd_cumulative
+    transform:
+      method: yoy_growth
+      window: null
+    interpretation:
+      positive: 매출 성장 가속은 top-line 모멘텀.
+      negative: 매출 둔화/역성장은 부담.
+      neutral: 횡보면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 분기값은 연누적(YTD) 기준 → 개별 분기는 인접 차분 필요.
+    status: active
+
+  - factor_id: VAL_OP_GROWTH
+    factor_name: 영업 이익 증가율
+    dimension: valuation
+    asset_classes: [kr_equity]
+    data_spec_id: DS_KR_EQUITY_FINANCIALS
+    frequency: quarterly
+    unit: percent
+    cumulative_type: ytd_cumulative
+    transform:
+      method: yoy_growth
+      window: null
+    interpretation:
+      positive: 영업이익 성장 가속은 이익 모멘텀(레버리지 효과).
+      negative: 영업이익 둔화는 부담.
+      neutral: 횡보면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 분기값은 연누적(YTD) 기준.
+      - 적자지속/흑자전환/적자전환 시 0으로 표시됨(실제 0과 구분 불가).
+    status: active
+
+  - factor_id: VAL_NET_GROWTH
+    factor_name: 순이익 증가율
+    dimension: valuation
+    asset_classes: [kr_equity]
+    data_spec_id: DS_KR_EQUITY_FINANCIALS
+    frequency: quarterly
+    unit: percent
+    cumulative_type: ytd_cumulative
+    transform:
+      method: yoy_growth
+      window: null
+    interpretation:
+      positive: 순이익 성장 가속은 최종 이익 모멘텀.
+      negative: 순이익 둔화/역성장은 부담.
+      neutral: 횡보면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 분기값은 연누적(YTD) 기준.
+    status: active
+
+  - factor_id: VAL_ROE
+    factor_name: ROE
+    dimension: valuation
+    asset_classes: [kr_equity]
+    data_spec_id: DS_KR_EQUITY_FINANCIALS
+    frequency: quarterly
+    unit: percent
+    cumulative_type: ytd_cumulative
+    transform:
+      method: level
+      window: null
+    interpretation:
+      positive: 고ROE는 자본효율 우수(PBR 프리미엄 정당화).
+      negative: 저ROE/하락은 수익성 부담.
+      neutral: 업종 평균 수준이면 중립.
+    output_fields: [signal, strength, evidence, caveat]
+    caveats:
+      - 분기값은 연누적(YTD) 기준.
+    status: active
+
   - factor_id: VAL_EPS
     factor_name: EPS
     dimension: valuation
     asset_classes: [kr_equity]
-    data_spec_ids: [DS_KR_EQUITY_VALUATION]
-    frequency: daily
+    data_spec_id: DS_KR_EQUITY_FINANCIALS
+    frequency: quarterly
     unit: KRW
-    cumulative_type: point_in_time
+    cumulative_type: ytd_cumulative
     transform:
       method: level
       window: null
@@ -735,36 +816,37 @@ factors:
       neutral: 변화 미미하면 중립.
     output_fields: [signal, strength, evidence, caveat]
     caveats:
-      - 컨센서스(선행 EPS) 아님.
+      - 재무비율 API 기준(종전 valuation 스냅샷 EPS를 대체).
+      - 분기값은 연누적(YTD) 기준.
     status: active
 
-  - factor_id: VAL_EPS_GROWTH
-    factor_name: EPS 성장률
+  - factor_id: VAL_NET_MARGIN
+    factor_name: 매출액 순이익율
     dimension: valuation
-    asset_classes: [kr_equity, us_equity]
-    data_spec_ids: null
+    asset_classes: [kr_equity]
+    data_spec_id: DS_KR_EQUITY_FINANCIALS
     frequency: quarterly
     unit: percent
-    cumulative_type: point_in_time
+    cumulative_type: ytd_cumulative
     transform:
-      method: yoy_growth
+      method: level
       window: null
     interpretation:
-      positive: EPS 성장률 가속은 이익 모멘텀.
-      negative: EPS 성장률 둔화/역성장은 부담.
-      neutral: 횡보면 중립.
+      positive: 순이익률 개선은 최종 수익성 강화.
+      negative: 순이익률 훼손은 부담.
+      neutral: 안정적이면 중립.
     output_fields: [signal, strength, evidence, caveat]
     caveats:
-      - 미수집 — 분기 EPS 시계열(재무) 필요. 스냅샷 eps 누적으로 근사 가능하나 정합성 낮음.
-    status: draft
+      - 분기값은 연누적(YTD) 기준.
+    status: active
 
   - factor_id: VAL_EV_EBITDA
     factor_name: EV/EBITDA
     dimension: valuation
-    asset_classes: [kr_equity, us_equity]
-    data_spec_ids: null
+    asset_classes: [kr_equity]
+    data_spec_id: DS_KR_EQUITY_FINANCIALS
     frequency: quarterly
-    unit: ratio
+    unit: multiple
     cumulative_type: point_in_time
     transform:
       method: z_score
@@ -775,37 +857,17 @@ factors:
       neutral: 중앙이면 중립.
     output_fields: [signal, strength, evidence, caveat]
     caveats:
-      - 미수집 — EV(시총+순부채)·EBITDA 재무 소스 필요. KIS 스냅샷엔 없음.
-    status: draft
-
-  - factor_id: VAL_ROE
-    factor_name: ROE
-    dimension: valuation
-    asset_classes: [kr_equity, us_equity, kr_index, us_index]
-    data_spec_ids: null
-    frequency: quarterly
-    unit: percent
-    cumulative_type: point_in_time
-    transform:
-      method: level
-      window: null
-    interpretation:
-      positive: 고ROE는 자본효율 우수(PBR 프리미엄 정당화).
-      negative: 저ROE/하락은 수익성 부담.
-      neutral: 업종 평균 수준이면 중립.
-    output_fields: [signal, strength, evidence, caveat]
-    caveats:
-      - 미수집 — 재무(순이익/자기자본) 소스 필요.
-    status: draft
+      - 분기 대부분 0.00(미산출), 연말 결산만 유효값 → 0.00은 결측으로 해석 권장.
+    status: active
 
   - factor_id: VAL_OP_MARGIN
     factor_name: 영업이익률
     dimension: valuation
-    asset_classes: [kr_equity, us_equity]
-    data_spec_ids: null
+    asset_classes: [kr_equity]
+    data_spec_id: DS_KR_EQUITY_FINANCIALS
     frequency: quarterly
     unit: percent
-    cumulative_type: point_in_time
+    cumulative_type: ytd_cumulative
     transform:
       method: level
       window: null
@@ -815,65 +877,6 @@ factors:
       neutral: 안정적이면 중립.
     output_fields: [signal, strength, evidence, caveat]
     caveats:
-      - 미수집 — 손익계산서(영업이익/매출) 소스 필요.
-    status: draft
-
-  - factor_id: VAL_NET_MARGIN
-    factor_name: 순이익률
-    dimension: valuation
-    asset_classes: [kr_equity, us_equity]
-    data_spec_ids: null
-    frequency: quarterly
-    unit: percent
-    cumulative_type: point_in_time
-    transform:
-      method: level
-      window: null
-    interpretation:
-      positive: 순이익률 개선은 최종 수익성 강화.
-      negative: 순이익률 훼손은 부담.
-      neutral: 안정적이면 중립.
-    output_fields: [signal, strength, evidence, caveat]
-    caveats:
-      - 미수집 — 손익계산서(순이익/매출) 소스 필요.
-    status: draft
-
-  - factor_id: VAL_REVENUE_GROWTH
-    factor_name: 매출성장률
-    dimension: valuation
-    asset_classes: [kr_equity, us_equity]
-    data_spec_ids: null
-    frequency: quarterly
-    unit: percent
-    cumulative_type: point_in_time
-    transform:
-      method: yoy_growth
-      window: null
-    interpretation:
-      positive: 매출 성장 가속은 top-line 모멘텀.
-      negative: 매출 둔화/역성장은 부담.
-      neutral: 횡보면 중립.
-    output_fields: [signal, strength, evidence, caveat]
-    caveats:
-      - 미수집 — 분기 매출 시계열 필요.
-    status: draft
-
-  - factor_id: VAL_OP_GROWTH
-    factor_name: 영업이익성장률
-    dimension: valuation
-    asset_classes: [kr_equity, us_equity]
-    data_spec_ids: null
-    frequency: quarterly
-    unit: percent
-    cumulative_type: point_in_time
-    transform:
-      method: yoy_growth
-      window: null
-    interpretation:
-      positive: 영업이익 성장 가속은 이익 모멘텀(레버리지 효과).
-      negative: 영업이익 둔화는 부담.
-      neutral: 횡보면 중립.
-    output_fields: [signal, strength, evidence, caveat]
-    caveats:
-      - 미수집 — 분기 영업이익 시계열 필요.
-    status: draft
+      - 파생 값 — 영업이익/매출액×100(손익계산서 기준). API 직접 제공 아님.
+      - 분기값은 연누적(YTD) 기준.
+    status: active

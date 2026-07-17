@@ -157,7 +157,6 @@ def _parse_valuation(o1: object) -> StockValuationSnapshot:
         listed_shares=_to_decimal(_get(o1, "lstn_stcn")),
         market_cap=_to_decimal(_get(o1, "hts_avls")),
         per=_to_decimal(_get(o1, "per")),
-        eps=_to_decimal(_get(o1, "eps")),
         pbr=_to_decimal(_get(o1, "pbr")),
     )
 

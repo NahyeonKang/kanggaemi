@@ -1,0 +1,30 @@
+version: "1.0"
+timezone: Asia/Seoul
+
+defaults:
+  retry:
+    max_attempts: 3
+    initial_delay_seconds: 1
+    multiplier: 2
+    max_delay_seconds: 30
+
+jobs:
+  universe-refresh:
+    schedule: "weekly Sunday 05:00 Asia/Seoul"
+    handler: universe_refresh
+    div_cls_code: "1"
+    markets:
+      kospi:
+        top_n: 10
+      kosdaq:
+        top_n: 10
+
+  stock-prices:
+    schedule: "daily 05:00 Asia/Seoul"
+    handler: stock_prices
+    depends_on: [universe-refresh]
+    universe_job: universe-refresh
+    target_source: latest_universe_membership
+    asset_class: stock
+    period: D
+    adj: "0"

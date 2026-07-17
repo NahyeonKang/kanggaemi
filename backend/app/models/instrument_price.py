@@ -71,7 +71,6 @@ class StockValuationSnapshotModel(Base):
     listed_shares = Column(Numeric(24, 2))
     market_cap = Column(Numeric(24, 2))                    # 억원
     per = Column(Numeric(14, 4))
-    eps = Column(Numeric(18, 4))
     pbr = Column(Numeric(14, 4))
     ingested_at = Column(DateTime(timezone=True), nullable=False)
 

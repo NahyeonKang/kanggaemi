@@ -14,3 +14,4 @@ sqlalchemy
 holidays
 psycopg2-binary
 PyYAML
+tzdata; platform_system == "Windows"

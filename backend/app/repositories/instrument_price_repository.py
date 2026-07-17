@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 _OHLCV_FIELDS = ("open", "high", "low", "close", "volume", "amount")
 _VAL_FIELDS = (
     "name", "current_price", "upper_limit", "lower_limit", "vol_turnover",
-    "listed_shares", "market_cap", "per", "eps", "pbr",
+    "listed_shares", "market_cap", "per", "pbr",
 )
 _DERIV_FIELDS = (
     "name", "current_price", "upper_limit", "lower_limit", "basis", "kospi200",

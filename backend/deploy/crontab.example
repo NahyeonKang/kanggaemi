@@ -1,0 +1,7 @@
+# Host timezone must be Asia/Seoul (or set CRON_TZ if supported by the cron daemon).
+CRON_TZ=Asia/Seoul
+SHELL=/bin/sh
+
+# Replace /opt/kanggaemi/backend and the Python path for the deployment.
+# The wrapper preserves universe-refresh -> stock-prices ordering on Sundays.
+0 5 * * * cd /opt/kanggaemi/backend && KANGGAEMI_PYTHON=/opt/kanggaemi/venv/bin/python /bin/sh ./deploy/run_daily_batch.sh

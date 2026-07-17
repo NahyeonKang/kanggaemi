@@ -36,7 +36,6 @@ class StockValuationSnapshot(BaseModel):
     listed_shares: Optional[Decimal] = None
     market_cap: Optional[Decimal] = None
     per: Optional[Decimal] = None
-    eps: Optional[Decimal] = None
     pbr: Optional[Decimal] = None
 
 
@@ -105,7 +104,6 @@ class StockValuationResponse(BaseModel):
     listed_shares: Optional[Decimal]
     market_cap: Optional[Decimal]
     per: Optional[Decimal]
-    eps: Optional[Decimal]
     pbr: Optional[Decimal]
     ingested_at: datetime
 

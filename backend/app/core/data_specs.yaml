@@ -2477,3 +2477,160 @@ data_specs:
       - 정정 이력 필요 시 (observation_date, ingested_at) 유니크 + insert-on-change로 승격.
     notes:
       - 원자료 단위 억원(정의서 명시).
+
+# ===================================================================
+  # 개별 종목 재무 (KIS 재무 4종 병합)
+  # ===================================================================
+  - data_spec_id: DS_KR_EQUITY_FINANCIALS
+    name: 국내주식 재무(결산기간별)
+    description: 손익계산서·재무비율·수익성비율·기타주요비율 4종 API를 결산기간(stac_yymm) 기준으로 병합한 종목 재무 시계열.
+    status: active
+
+    source:
+      provider: KIS
+      source_type: api
+      module: app.scrapers.kis.kis_financials_scraper
+      function: fetch_financials
+      endpoint_name: 손익계산서[079]+재무비율[080]+수익성비율[081]+기타주요비율[082] 병합
+      endpoint_path: /uapi/domestic-stock/v1/finance/{income-statement,financial-ratio,profit-ratio,other-major-ratios}
+      auth_required: true
+
+    usage:
+      dimensions: [valuation]
+      related_factors:
+        - VAL_REVENUE_GROWTH
+        - VAL_OP_GROWTH
+        - VAL_NET_GROWTH
+        - VAL_ROE
+        - VAL_EPS
+        - VAL_NET_MARGIN
+        - VAL_EV_EBITDA
+        - VAL_OP_GROWTH
+
+    params:
+      required:
+        - name: ticker
+          type: string
+          example: "005930"
+          default: null
+          description: 6자리 종목코드
+      optional:
+        - name: div_cls_code
+          type: string
+          example: "0"
+          default: "0"
+          description: 결산 구분. 0=년(annual), 1=분기(quarter, 연누적 YTD)
+
+    data_contract:
+      grain: asset_period
+      frequency: quarterly
+      timezone: Asia/Seoul
+      unit:
+        revenue: KRW_100M
+        op_income: KRW_100M
+        revenue_growth: percent
+        op_income_growth: percent
+        net_income_growth: percent
+        roe: percent
+        eps: KRW
+        net_profit_margin: percent
+        ev_ebitda: multiple
+      cumulative_type: ytd_cumulative
+      is_estimated: false
+      update_timing: 결산 발표 후(분기/연간)
+      expected_lag: 분기 결산 공시 시점(수 주)
+      history_available: 종목당 수년치(한 호출)
+
+    output_schema:
+      primary_key: [source, ticker, period_type, stac_yymm]
+      datetime_field: stac_yymm
+      fields:
+        - name: source
+          type: string
+          nullable: false
+          unit: null
+          description: "kis"
+        - name: ticker
+          type: string
+          nullable: false
+          unit: null
+          description: 6자리 종목코드
+        - name: period_type
+          type: string
+          nullable: false
+          unit: null
+          description: annual | quarter (div_cls_code 0/1 매핑)
+        - name: stac_yymm
+          type: string
+          nullable: false
+          unit: null
+          description: 결산년월 "YYYYMM"
+        - name: revenue
+          type: float
+          nullable: true
+          unit: KRW_100M
+          description: 매출액(sale_account, 누적)
+        - name: op_income
+          type: float
+          nullable: true
+          unit: KRW_100M
+          description: 영업이익(bsop_prti, 누적)
+        - name: revenue_growth
+          type: float
+          nullable: true
+          unit: percent
+          description: 매출액 증가율(grs)
+        - name: op_income_growth
+          type: float
+          nullable: true
+          unit: percent
+          description: 영업이익 증가율(bsop_prfi_inrt). 적자지속/흑자전환/적자전환 시 0 표시
+        - name: net_income_growth
+          type: float
+          nullable: true
+          unit: percent
+          description: 순이익 증가율(ntin_inrt)
+        - name: roe
+          type: float
+          nullable: true
+          unit: percent
+          description: ROE(roe_val)
+        - name: eps
+          type: float
+          nullable: true
+          unit: KRW
+          description: EPS(eps). 종전 valuation 스냅샷 EPS를 대체
+        - name: net_profit_margin
+          type: float
+          nullable: true
+          unit: percent
+          description: 매출액 순이익율(sale_ntin_rate)
+        - name: ev_ebitda
+          type: float
+          nullable: true
+          unit: multiple
+          description: EV/EBITDA(ev_ebitda). 분기 대부분 0.00(미산출), 연말만 유효
+        - name: ingested_at
+          type: datetime
+          nullable: false
+          unit: null
+          description: 적재 시각(UTC)
+
+    validation:
+      freshness_check: true
+      max_missing_ratio: 0.2
+      required_fields: [ticker, period_type, stac_yymm]
+      sanity_checks:
+        - revenue >= 0 or revenue is null
+        - eps can be negative
+
+    caveats:
+      - "분기(period_type=quarter)는 연단위 누적(YTD). 개별 분기값이 아님(정의서 명시) → 개별 분기는 인접 차분 필요."
+      - "영업이익 증가율은 적자지속/흑자전환/적자전환 시 0으로 표시됨(실제 0과 구분 불가)."
+      - "EV/EBITDA는 분기 대부분 0.00(미산출), 연말 결산만 유효값. 0.00을 결측으로 해석 권장."
+      - 4개 API를 stac_yymm 기준 outer-merge. 특정 API에 없는 기간은 해당 필드 null.
+      - 단위 혼재 — 금액(매출/영업이익) 억원, EPS 원, 증가율/ROE/마진 %, EV/EBITDA 배수.
+      - 손익계산서의 감가상각비·판관비 등 일부 필드는 99.99(미출력) → 미사용.
+      - pagination 없음. 종목당 수년치 시계열 반환.
+    notes:
+      - EPS 이관: 종전 stock_valuation_snapshot.eps 제거, 본 스펙 eps로 대체(PER/PBR은 DS_KR_EQUITY_VALUATION 유지).
