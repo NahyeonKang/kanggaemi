@@ -65,6 +65,21 @@ class RevisingReasoner:
         }
 
 
+class LowScoreWithoutFeedbackReasoner(RevisingReasoner):
+    def evaluate(self, _payload):
+        self.evaluation_calls += 1
+        return {
+            "rubric_scores": {
+                "evidence_coverage": 5, "data_freshness": 5,
+                "logical_consistency": 5, "risk_awareness": 5,
+                "actionability": 5, "overconfidence_control": 5, "user_fit": 0,
+            },
+            "warnings": [], "critical_issues": [],
+            "improvement_suggestions": [], "missing_factors": [],
+            "revised_summary": "",
+        }
+
+
 def test_complete_graph_parallel_analysis_revision_loop_and_report():
     reasoner = RevisingReasoner()
     graph = build_investment_report_graph(
@@ -84,3 +99,23 @@ def test_complete_graph_parallel_analysis_revision_loop_and_report():
     assert "관점: 혼재" in result["user_facing_report"]
     assert "관점: mixed" not in result["user_facing_report"]
     assert result["notion_report_page"]["run_id"] == "report-test"
+
+
+def test_revision_limit_applies_when_low_score_has_no_feedback():
+    reasoner = LowScoreWithoutFeedbackReasoner()
+    graph = build_investment_report_graph(
+        FakeResolver(), reasoner, feature_engine=FakeFeatureEngine(),
+    )
+
+    result = graph.invoke({
+        "run_id": "empty-feedback-limit-test",
+        "user_query": "삼성전자 전망",
+        "as_of_date": "2026-07-16",
+        "locale": "ko-KR",
+    })
+
+    assert reasoner.synthesis_calls == 3
+    assert reasoner.evaluation_calls == 3
+    assert result["revision_count"] == 2
+    assert result["evaluation_result"]["passed"] is False
+    assert "user_facing_report" in result

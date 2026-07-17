@@ -183,7 +183,11 @@ def make_synthesize_node(reasoner: ReportReasoner) -> Callable[[InvestmentAgentS
             ),
         )
         revised = state.get("revision_count", 0)
-        if state.get("evaluation_feedback"):
+        # The first synthesis has no evaluation_result. Every later synthesis
+        # is a revision even when the evaluator returns no textual feedback.
+        # Basing this on feedback truthiness can leave the counter at zero for
+        # a sub-threshold score and create an unbounded evaluation loop.
+        if "evaluation_result" in state:
             revised += 1
         return {"synthesis_result": result.model_dump(), "revision_count": revised}
 
