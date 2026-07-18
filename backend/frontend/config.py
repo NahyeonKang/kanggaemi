@@ -40,6 +40,3 @@ def resolve_font_family() -> str:
 MOCK_DELAY_SECONDS = float(os.getenv("KANGGAEMI_MOCK_DELAY_SECONDS", "0.45"))
 APP_TITLE = os.getenv("KANGGAEMI_FRONTEND_TITLE", "투자 전략 리포트 에이전트")
 DEFAULT_ADAPTER = os.getenv("KANGGAEMI_AGENT_ADAPTER", "langgraph").lower()
-SETUP_CHECKPOINTER = os.getenv(
-    "KANGGAEMI_AGENT_SETUP_CHECKPOINTER", "false"
-).lower() in {"1", "true", "yes", "on"}

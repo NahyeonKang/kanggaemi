@@ -19,7 +19,7 @@ Mock 노드 간 지연시간은 기본 0.45초이며 `KANGGAEMI_MOCK_DELAY_SECON
 
 - `.env`에 유효한 `DATABASE_URL`과 `OPENAI_API_KEY`가 필요합니다.
 - `DATABASE_URL`은 PostgresSaver를 사용할 수 있는 PostgreSQL URL이어야 합니다.
-- 체크포인터 테이블을 아직 만들지 않았다면 최초 실행에만 `PostgresSaver 테이블 초기화`를 선택합니다.
+- PostgresSaver 테이블은 에이전트 CLI의 `--setup-checkpointer`로 최초 1회 준비합니다.
 - 실제 그래프에 아직 포함되지 않은 YAML 노드는 진행 표시만 Mock으로 보완합니다. 실제 그래프 오류나 인증 오류는 Mock으로 숨기지 않고 `error` 이벤트로 표시합니다.
 
 기본 어댑터는 실제 LangGraph입니다. Mock을 기본값으로 사용하려면 다음을 설정합니다.

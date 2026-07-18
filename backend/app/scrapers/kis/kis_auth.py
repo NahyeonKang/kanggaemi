@@ -61,9 +61,6 @@ class APIResp:
     def getBody(self):
         return self._body
 
-    def getResponse(self) -> requests.Response:
-        return self._resp
-
     def isOK(self) -> bool:
         try:
             return self.getBody().rt_cd == "0"

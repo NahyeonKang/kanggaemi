@@ -34,7 +34,7 @@ import streamlit as st
 
 from frontend.adapters import LangGraphAgentAdapter, MockAgentAdapter
 from frontend.adapters.base import AgentEventAdapter
-from frontend.config import APP_TITLE, DEFAULT_ADAPTER, SETUP_CHECKPOINTER
+from frontend.config import APP_TITLE, DEFAULT_ADAPTER
 from frontend.contracts import NodeEvent
 from frontend.pdf import FontConfigurationError, PdfGenerationError, make_pdf_filename, markdown_to_pdf
 from frontend.specs import FrontendNodeSpec, FrontendSpecs, load_frontend_specs
@@ -125,7 +125,6 @@ def main() -> None:
         st.stop()
 
     st.title(APP_TITLE)
-    st.caption("실제 LangGraph task 이벤트와 YAML 기반 Mock 이벤트를 같은 계약으로 표시합니다.")
     with st.sidebar:
         st.header("분석 옵션")
         as_of = st.date_input("기준일 (as_of)", value=date.today(), disabled=st.session_state.running)
@@ -138,12 +137,6 @@ def main() -> None:
             "실행 어댑터", options=list(adapter_labels),
             format_func=adapter_labels.__getitem__, index=default_index,
             disabled=st.session_state.running,
-        )
-        setup_checkpointer = st.checkbox(
-            "PostgresSaver 테이블 초기화",
-            value=SETUP_CHECKPOINTER,
-            disabled=st.session_state.running or selected_adapter == "mock",
-            help="최초 1회만 선택하면 됩니다.",
         )
 
     query = st.text_input(
@@ -163,7 +156,6 @@ def main() -> None:
             st.session_state.active_query = query.strip()
             st.session_state.active_as_of = as_of
             st.session_state.active_adapter = selected_adapter
-            st.session_state.setup_checkpointer = setup_checkpointer
             st.session_state.report_markdown = None
             st.session_state.report_payload = None
             st.session_state.pdf_bytes = None
@@ -185,9 +177,7 @@ def main() -> None:
     if st.session_state.run_requested:
         adapter: AgentEventAdapter
         if st.session_state.active_adapter == "langgraph":
-            adapter = LangGraphAgentAdapter(
-                specs, setup_checkpointer=st.session_state.get("setup_checkpointer", False),
-            )
+            adapter = LangGraphAgentAdapter(specs)
         else:
             adapter = MockAgentAdapter(specs)
         _consume_stream(specs, slots, adapter)

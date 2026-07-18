@@ -107,17 +107,6 @@ class ExchangeRateRepository:
             .first()
         )
 
-    def get_snapshots(
-        self, db: Session, base_ccy: str, quote_ccy: str, target_date: str
-    ) -> list[ExchangeRateIntradaySnapshotModel]:
-        """해당 거래일 전체 스냅샷 시계열(intraday_significant 파생 등)."""
-        return (
-            db.query(ExchangeRateIntradaySnapshotModel)
-            .filter_by(base_ccy=base_ccy, quote_ccy=quote_ccy, target_date=target_date)
-            .order_by(ExchangeRateIntradaySnapshotModel.observed_at.asc())
-            .all()
-        )
-
     # ── 일별 종가 (upsert; base_rate 변동 시에만 갱신) ─────────
     def upsert_daily_quotes(self, db: Session, data: KBUsdKrwDailySeries) -> int:
         """Insert or update daily rows. 반환: 신규+변경 행 수."""

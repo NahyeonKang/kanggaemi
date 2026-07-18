@@ -76,9 +76,5 @@ class FredScraper:
             observations=observations,
         )
 
-    # ---- convenience wrappers ----
-    def fetch_last_1w_series(self, series_id: str) -> FredSeriesData:
-        return self.fetch_series(series_id, days=7)
-
     def fetch_last_1y_series(self, series_id: str) -> FredSeriesData:
         return self.fetch_series(series_id, days=365)
